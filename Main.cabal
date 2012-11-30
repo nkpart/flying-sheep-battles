@@ -1,0 +1,16 @@
+Name:                SDLTemplate
+Version:             1.0
+Category:            Game
+Build-type:          Simple
+Extra-source-files:
+  mainc.c
+  MainWrapper_stub.h
+  MainWrapper.hs
+  Main.hs
+Cabal-version:       >=1.2
+Executable main
+  Main-is:           MainWrapper.hs
+  C-Sources:         mainc.c
+  Ghc-options:       -no-hs-main
+  Build-depends:     base, SDL, SDL-image
+
