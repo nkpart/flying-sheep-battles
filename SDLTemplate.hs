@@ -1,3 +1,5 @@
+module SDLTemplate where
+
 import qualified Graphics.UI.SDL as SDL
 import qualified Graphics.UI.SDL.Image as SDLI
 

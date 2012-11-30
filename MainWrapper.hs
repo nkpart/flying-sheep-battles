@@ -1,4 +1,4 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 module MainWrapper where
-import Main (main)
+import SDLTemplate (main)
 foreign export ccall "haskell_main" main :: IO ()

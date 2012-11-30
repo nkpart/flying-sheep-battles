@@ -6,9 +6,9 @@ Extra-source-files:
   mainc.c
   MainWrapper_stub.h
   MainWrapper.hs
-  Main.hs
+  SDLTemplate.hs
 Cabal-version:       >=1.2
-Executable main
+Executable sdltemplate
   Main-is:           MainWrapper.hs
   C-Sources:         mainc.c
   Ghc-options:       -no-hs-main
