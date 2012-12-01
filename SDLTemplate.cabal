@@ -1,7 +1,7 @@
 Name:                SDLTemplate
 Version:             1.0
 Category:            Game
-Build-type:          Simple
+Build-type:          Custom
 Extra-source-files:
   mainc.c
   MainWrapper_stub.h
@@ -12,5 +12,5 @@ Executable sdltemplate
   Main-is:           MainWrapper.hs
   C-Sources:         mainc.c
   Ghc-options:       -no-hs-main
-  Build-depends:     base, SDL, SDL-image
+  Build-depends:     base, SDL, SDL-image, cabal-macosx, FindBin, filepath
 
