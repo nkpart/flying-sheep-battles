@@ -8,6 +8,12 @@ Extra-source-files:
   MainWrapper.hs
   SDLTemplate.hs
 Cabal-version:       >=1.2
+Data-files:  *.png
+
+Flag bundleall
+  Description: Bundle all resources into the .app (OSX only)
+  Default:     True
+
 Executable sdltemplate
   Main-is:           MainWrapper.hs
   C-Sources:         mainc.c
