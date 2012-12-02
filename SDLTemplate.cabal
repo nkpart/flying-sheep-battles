@@ -15,6 +15,7 @@ Flag bundleall
   Default:     True
 
 Executable sdltemplate
+  Other-modules:     DynPaths_SDLTemplate
   Main-is:           MainWrapper.hs
   C-Sources:         mainc.c
   Ghc-options:       -no-hs-main
