@@ -19,5 +19,15 @@ Executable sdltemplate
   Main-is:           MainWrapper.hs
   C-Sources:         mainc.c
   Ghc-options:       -no-hs-main
-  Build-depends:     base, SDL, SDL-image, cabal-macosx, FindBin, filepath, containers, netwire
+  Build-depends:     base
+                   , SDL
+                   , SDL-image
+                   , cabal-macosx
+                   , FindBin
+                   , filepath
+                   , containers
+                   , netwire
+                   , lens
+                   , newtype
+                   , vector-space
 

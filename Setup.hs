@@ -19,7 +19,7 @@ applist resources = [
     MacApp
         "SDLTemplate"
         (Just "SDLTemplate.icns")
-        Nothing -- Build a default Info.plist for the icon.
+        (Just "Info.plist") -- Build a default Info.plist for the icon.
         -- list or resources (to be copied to .app/Contents/Resources)
         resources
         [] -- No other binaries.

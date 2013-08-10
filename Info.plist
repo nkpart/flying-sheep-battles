@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist SYSTEM "file://localhost/System/Library/DTDs/PropertyList.dtd">
+<plist version="0.9">
+<dict>
+<key>LSBackgroundOnly</key>
+<string>True</string>
+<key>CFBundleInfoDictionaryVersion</key>
+<string>6.0</string>
+<key>CFBundleIdentifier</key>
+<string>org.haskell.SDLTemplate</string>
+<key>CFBundleDevelopmentRegion</key>
+<string>English</string>
+<key>CFBundleExecutable</key>
+<string>SDLTemplate</string>
+<key>CFBundleIconFile</key>
+<string>SDLTemplate.icns</string>
+<key>CFBundleName</key>
+<string>SDLTemplate</string>
+<key>CFBundlePackageType</key>
+<string>APPL</string>
+<key>CFBundleSignature</key>
+<string>????</string>
+<key>CFBundleVersion</key>
+<string>1.0</string>
+<key>CFBundleShortVersionString</key>
+<string>1.0</string>
+<key>CFBundleGetInfoString</key>
+<string>SDLTemplate, bundled by cabal-macosx</string>
+<key>LSRequiresCarbon</key>
+<true/>
+<key>CSResourcesFileMapped</key>
+<true/>
+</dict>
+</plist>
