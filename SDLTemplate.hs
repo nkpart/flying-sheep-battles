@@ -5,25 +5,27 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 module SDLTemplate where
 
+import qualified Control.Monad as M (when)
 import Data.Maybe (listToMaybe)
 import qualified Config as C
-import Data.Function (on)
 import Graphics
 import Wires
 import Control.Lens hiding (within)
 import Data.VectorSpace hiding (Sum)
 import Data.Monoid
-import Data.Foldable
+import Data.Foldable (forM_, asum)
 import Debug.Trace (trace)
 import Prelude hiding ((.), id)
 import Control.Wire hiding (empty)
 import qualified Data.Set as Set (insert, null, filter, toList, fromList)
 import Data.Set (Set)
 import Data.List as List (deleteBy)
+import Data.Function (on)
 import qualified Graphics.UI.SDL as SDL
+import qualified Graphics.UI.SDL.Image as SDLI
 import Data.Fixed
 
-data Ship = Ship { _shipPosition :: (Double, Double), _shipThrust :: (Double, Double) } deriving (Eq, Show)
+data Ship = Ship { _shipPosition :: (Double, Double), _shipThrust :: (Double, Double), _shipVelocity :: (Double, Double) } deriving (Eq, Show)
 
 data Thing = Thing { _thingRect :: BLRect Int, _thingColor :: C.T3 Double }
 data World = World { _worldBox :: BLRect Int, _worldScenery :: [Thing] }
@@ -72,15 +74,17 @@ randomPositions = proc wat -> do
 main :: IO ()
 main = SDL.withInit [SDL.InitEverything] $ do
   screen <- SDL.setVideoMode C.width C.height 32 [SDL.SWSurface]
+  sheep <- SDLI.load "sheep.png"
   let shipThing = runShip (C.shipW, C.shipH) world 
-  go mempty screen clockSession (shipThing &&& sampleFPS 1 &&& (timeCycle >>> skyColor) &&& starsW (C.width, C.height))
+  go sheep mempty screen clockSession (shipThing &&& sampleFPS 1 &&& (timeCycle >>> skyColor) &&& starsW (C.width, C.height))
  where
-  go keysDown screen s w = do
+  go image keysDown screen s w = do
     let draw = paintRect screen C.height
     keysDown' <- parseEvents keysDown
-    ((((ship1, boosted1), (ship2, boosted2), groundSide), (fps, (sky, stars))), w', s') <- stepSession_ w s keysDown'
+    (state@(((ship1, boosted1), (ship2, boosted2), groundSide, victory), (fps, (sky, stars))), w', s') <- stepSession_ w s keysDown'
 
     forM_ fps print
+
     -- The backdrop
     paintScreen screen sky
     forM_ stars $ \(x,y) -> draw (lerp sky (255,255,255) ((fromIntegral y / fromIntegral C.height) ^ 2)) $ BLRect x y 2 2
@@ -91,18 +95,23 @@ main = SDL.withInit [SDL.InitEverything] $ do
                    R -> BLRect (C.width - 10) 0 10 C.height
                    T -> BLRect 0 (C.height - 10) C.width 10
                    B -> BLRect 0 0 C.width 10
-    draw (0, 200, 0) ground
+    draw (209, 223, 188) ground
 
-    let handleShip ship boosted = do
-        wiggle <- if _shipThrust ship /= (0,0) 
+    let handleShip img ship boosted victory = do
+        wiggle <- if _shipThrust ship /= (0,0)
                     then randomRIO (-2, 2)
                     else return 0
         let (sizeX', sizeY') = over both (+ wiggle * 2) (C.shipW, C.shipH)
 
         -- Draw Ship
         let (Ship {..}) = ship
-        let (leftEdge, bottomEdge) = over both round _shipPosition - over both (`div` 2) (sizeX', sizeY')
-        draw (0, 50, 200) $ BLRect leftEdge bottomEdge sizeX' sizeY'
+        let rect@(BLRect leftEdge bottomEdge _ _)  = rectForCenter _shipPosition (sizeX', sizeY') 
+        -- draw (0, 50, 200) rect
+        let x = Just $ toSDLRect C.height rect
+        SDL.blitSurface image Nothing screen x
+        case victory of 
+          Just False -> draw (255, 0, 0) $ BLRect leftEdge bottomEdge C.shipW 10
+          _ -> return ()
 
         -- Draw Thrusters
         let (tx, ty) = _shipThrust
@@ -110,11 +119,17 @@ main = SDL.withInit [SDL.InitEverything] $ do
         let thrustColor = if not boosted then (200,50,0) else (255, 100, 0)
         forM_ (thrusters sizeX' sizeY' tx ty boosted) (draw thrustColor . moveRelativeTo (leftEdge, bottomEdge))
 
-    handleShip ship1 boosted1
-    handleShip ship2 boosted2
+    let winFor1 = maybe 
+    handleShip image ship1 boosted1 $ victory
+    handleShip image ship2 boosted2 $ fmap not victory
 
     SDL.flip screen
-    go keysDown' screen s' w'
+    case victory of
+      Nothing -> go image keysDown' screen s' w'
+      Just _ -> go image keysDown' screen s' ((for 1 . pure state) <|> w')
+
+rectForCenter pos (sizeX', sizeY') = let (left, bottom) =  over both round pos - over both (`div` 2) (sizeX', sizeY')
+                                      in BLRect left bottom sizeX' sizeY'
 
 thrusters sizeX' sizeY' tx ty boosted = map snd . filter fst $ [
          (tx > 0 , BLRect (-sizeO) ((sizeY' `div` 2) - (size `div` 2)) sizeO size)
@@ -127,16 +142,21 @@ thrusters sizeX' sizeY' tx ty boosted = map snd . filter fst $ [
 
 runShip shipSize world = proc keysDown -> do
   g <- gravityEdge -< keysDown
-  (ship, boost) <- moveShip shipSize world player1 (100, 200) -< (keysDown, g)
+  (ship1, boost1) <- moveShip shipSize world player1 (100, 200) -< (keysDown, g)
   (ship2, boost2) <- moveShip shipSize world player2 (300, 200) -< (keysDown, g)
-  returnA -< ((ship, boost), (ship2, boost2), g)
+  let stuffed = rectForCenter (_shipPosition ship1) shipSize `overlapping` rectForCenter (_shipPosition ship2) shipSize
+  let ended = if stuffed then Just (ship1Wins ship1 ship2) else Nothing
+  returnA -< ((ship1, boost1), (ship2, boost2), g, ended)
+
+ship1Wins ship1 ship2 = let collisionVector = normalized $ _shipPosition ship1 - _shipPosition ship2
+                            collisionForce v = abs . magnitude . project collisionVector $ _shipVelocity v 
+                        in collisionForce ship1 > collisionForce ship2
 
 moveShip shipSize world controls initPos = proc (keysDown, g) -> do
   thrust <- acceleration controls -< keysDown
   boost <- boostAccel controls -< keysDown
-  (ObjectState pos _) <- spaceShipObject shipSize initPos -< (Accelerate ((thrust * if boost then 2.5 else 1.0) + gravity g), world)
-  returnA -< (Ship pos thrust, boost)
-
+  (ObjectState pos vel) <- spaceShipObject shipSize initPos -< (Accelerate ((thrust * if boost then 2.5 else 1.0) + gravity g), world)
+  returnA -< (Ship pos thrust vel, boost)
 
 boostAccel :: Monad m => Controls -> Wire e m (Set SDL.Keysym) Bool 
 boostAccel (Controls _ _ _ _ b) = arr (keyDown b)

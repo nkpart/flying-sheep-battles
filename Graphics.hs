@@ -34,3 +34,6 @@ corners r R = [bottomRight r, topRight r]
 corners r T = [topLeft r, topRight r]
 corners r B = [bottomLeft r, bottomRight r]
 
+allCorners r = map (corners r) [L, R, T, B]
+
+overlapping a b = any (`within` b) (join $ allCorners a) || any (`within` a) (join $ allCorners b)
