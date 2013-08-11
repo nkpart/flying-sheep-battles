@@ -15,3 +15,6 @@ foreverW a = a `andThen` foreverW a
 
 sampleFPS :: (Monad m, Monoid e, Integral b) => Time -> Wire e m a (Maybe b)
 sampleFPS secs = event (periodically secs . fmap (round . (1/)) dtime)
+
+if' :: (Monad m, Monoid e) => (a -> Bool) -> Wire e m a b -> Wire e m a b -> Wire e m a b 
+if' p a b = a . when p <|> b

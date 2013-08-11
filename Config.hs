@@ -6,7 +6,7 @@ nightColor, dayColor :: T3 Double
 nightColor = black
 dayColor = papayaWhip
 
-height, width, shipW, shipH :: Num a => a
+height, width, shipW, shipH :: Int
 height = 600
 width = 400
 
@@ -15,6 +15,7 @@ shipH = 64
 
 black = (0,0,0)
 
-goldenRod, papayaWhip :: Num a => T3 a
+goldenRod, papayaWhip, yellow :: Num a => T3 a
 goldenRod = (238, 232, 170)
 papayaWhip = (255, 239, 213)
+yellow = (0, 255, 255)

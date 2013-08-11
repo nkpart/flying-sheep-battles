@@ -30,4 +30,5 @@ Executable sdltemplate
                    , lens
                    , newtype
                    , vector-space
+                   , transformers
 
