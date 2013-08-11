@@ -5,7 +5,6 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 module SDLTemplate where
 
-
 import Data.Maybe (listToMaybe)
 import qualified Config as C
 import Data.Function (on)
@@ -28,6 +27,11 @@ data Ship = Ship { _shipPosition :: (Double, Double), _shipThrust :: (Double, Do
 
 data Thing = Thing { _thingRect :: BLRect Int, _thingColor :: C.T3 Double }
 data World = World { _worldBox :: BLRect Int, _worldScenery :: [Thing] }
+
+data Controls = Controls { _controlsLeft :: SDL.SDLKey, _controlsRight :: SDL.SDLKey, _controlsUp :: SDL.SDLKey, _controlsDown :: SDL.SDLKey, _controlsBoost :: SDL.SDLKey }
+
+player1 = Controls SDL.SDLK_a SDL.SDLK_d SDL.SDLK_w SDL.SDLK_s SDL.SDLK_LSHIFT
+player2 = Controls SDL.SDLK_LEFT SDL.SDLK_RIGHT SDL.SDLK_UP SDL.SDLK_DOWN SDL.SDLK_RSHIFT
 
 isThrusting = (/= (0,0)) . _shipThrust
 
@@ -74,15 +78,9 @@ main = SDL.withInit [SDL.InitEverything] $ do
   go keysDown screen s w = do
     let draw = paintRect screen C.height
     keysDown' <- parseEvents keysDown
-    (((ship, groundSide, boosted), (fps, (sky, stars))), w', s') <- stepSession_ w s keysDown'
+    ((((ship1, boosted1), (ship2, boosted2), groundSide), (fps, (sky, stars))), w', s') <- stepSession_ w s keysDown'
 
     forM_ fps print
-
-    wiggle <- if _shipThrust ship /= (0,0) 
-                then randomRIO (-2, 2)
-                else return 0
-    let (sizeX', sizeY') = over both (+ wiggle * 2) (C.shipW, C.shipH)
-
     -- The backdrop
     paintScreen screen sky
     forM_ stars $ \(x,y) -> draw (lerp sky (255,255,255) ((fromIntegral y / fromIntegral C.height) ^ 2)) $ BLRect x y 2 2
@@ -93,20 +91,27 @@ main = SDL.withInit [SDL.InitEverything] $ do
                    R -> BLRect (C.width - 10) 0 10 C.height
                    T -> BLRect 0 (C.height - 10) C.width 10
                    B -> BLRect 0 0 C.width 10
-
-
     draw (0, 200, 0) ground
 
-    -- Draw Ship
-    let (Ship {..}) = ship
-    let (leftEdge, bottomEdge) = over both round _shipPosition - over both (`div` 2) (sizeX', sizeY')
-    draw (0, 50, 200) $ BLRect leftEdge bottomEdge sizeX' sizeY'
+    let handleShip ship boosted = do
+        wiggle <- if _shipThrust ship /= (0,0) 
+                    then randomRIO (-2, 2)
+                    else return 0
+        let (sizeX', sizeY') = over both (+ wiggle * 2) (C.shipW, C.shipH)
 
-    -- Draw Thrusters
-    let (tx, ty) = _shipThrust
+        -- Draw Ship
+        let (Ship {..}) = ship
+        let (leftEdge, bottomEdge) = over both round _shipPosition - over both (`div` 2) (sizeX', sizeY')
+        draw (0, 50, 200) $ BLRect leftEdge bottomEdge sizeX' sizeY'
 
-    let thrustColor = if not boosted then (200,50,0) else (255, 100, 0)
-    forM_ (thrusters sizeX' sizeY' tx ty boosted) (draw thrustColor . moveRelativeTo (leftEdge, bottomEdge))
+        -- Draw Thrusters
+        let (tx, ty) = _shipThrust
+
+        let thrustColor = if not boosted then (200,50,0) else (255, 100, 0)
+        forM_ (thrusters sizeX' sizeY' tx ty boosted) (draw thrustColor . moveRelativeTo (leftEdge, bottomEdge))
+
+    handleShip ship1 boosted1
+    handleShip ship2 boosted2
 
     SDL.flip screen
     go keysDown' screen s' w'
@@ -122,20 +127,26 @@ thrusters sizeX' sizeY' tx ty boosted = map snd . filter fst $ [
 
 runShip shipSize world = proc keysDown -> do
   g <- gravityEdge -< keysDown
-  thrust <- acceleration -< keysDown
-  boost <- boostAccel -< keysDown
-  (ObjectState pos _) <- spaceShipObject shipSize -< (Accelerate ((thrust * if boost then 2.5 else 1.0) + gravity g), world)
-  returnA -< (Ship pos thrust, g, boost)
+  (ship, boost) <- moveShip shipSize world player1 (100, 200) -< (keysDown, g)
+  (ship2, boost2) <- moveShip shipSize world player2 (300, 200) -< (keysDown, g)
+  returnA -< ((ship, boost), (ship2, boost2), g)
 
-boostAccel :: Monad m => Wire e m (Set SDL.Keysym) Bool 
-boostAccel = arr (keyDown SDL.SDLK_LSHIFT)
+moveShip shipSize world controls initPos = proc (keysDown, g) -> do
+  thrust <- acceleration controls -< keysDown
+  boost <- boostAccel controls -< keysDown
+  (ObjectState pos _) <- spaceShipObject shipSize initPos -< (Accelerate ((thrust * if boost then 2.5 else 1.0) + gravity g), world)
+  returnA -< (Ship pos thrust, boost)
 
-acceleration :: (Monad m, Monoid e) => Wire e m (Set SDL.Keysym) (Double, Double)
-acceleration  = 100 *^ (
-                  if' (keyDown SDL.SDLK_LEFT) (pure (-1, 0)) (pure (0,0))
-                + if' (keyDown SDL.SDLK_RIGHT) (pure (1, 0)) (pure (0,0))
-                + if' (keyDown SDL.SDLK_UP) (pure (0, 3)) (pure (0,0))
-                + if' (keyDown SDL.SDLK_DOWN) (pure (0, -3)) (pure (0,0))
+
+boostAccel :: Monad m => Controls -> Wire e m (Set SDL.Keysym) Bool 
+boostAccel (Controls _ _ _ _ b) = arr (keyDown b)
+
+acceleration :: (Monad m, Monoid e) => Controls -> Wire e m (Set SDL.Keysym) (Double, Double)
+acceleration (Controls l r u d _)  = 100 *^ (
+                  if' (keyDown l) (pure (-1, 0)) (pure (0,0))
+                + if' (keyDown r) (pure (1, 0)) (pure (0,0))
+                + if' (keyDown u) (pure (0, 3)) (pure (0,0))
+                + if' (keyDown d) (pure (0, -3)) (pure (0,0))
                 )
 
 debug x = trace (show x) x
@@ -156,7 +167,7 @@ flip' R = L
 flip' T = B
 flip' B = T
 
-spaceShipObject (sizeX, sizeY) = object_ postUpdate (ObjectState (100, 200 - realToFrac sizeY/2) (0,10))
+spaceShipObject (sizeX, sizeY) (initX, initY) = object_ postUpdate (ObjectState (initX,initY) (0,0))
   where postUpdate world (ObjectState pos vel@(vx, vy)) = 
            let shipBox' = centerAndSizeToRect pos (realToFrac sizeX, realToFrac sizeY)
                collision = collisions shipBox' (fmap fromIntegral $ _worldBox world) <|> asum (map (collisions'' shipBox' . fmap fromIntegral . _thingRect) $ _worldScenery world )
