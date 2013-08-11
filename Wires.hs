@@ -9,7 +9,7 @@ import Prelude hiding ((.))
 interpolateFromTo :: (Monad m, VectorSpace c, Monoid e, Scalar c ~ Double) => c -> c -> Scalar c -> Wire e m b c
 interpolateFromTo start finish duration = let step dt old = old ^+^ (finish ^-^ start) ^* (dt/duration)
                                            in iterateWT step start . for duration 
-                                 
+
 foreverW :: Monad m => Wire e m a b -> Wire e m a b
 foreverW a = a `andThen` foreverW a
 

@@ -16,7 +16,7 @@ import Data.VectorSpace hiding (Sum)
 import Data.Monoid
 import Data.Foldable
 import Debug.Trace (trace)
-import Prelude hiding ((.), id, null)
+import Prelude hiding ((.), id)
 import Control.Wire hiding (empty)
 import qualified Data.Set as Set (insert, null, filter, toList, fromList)
 import Data.Set (Set)
@@ -26,7 +26,7 @@ import Data.Fixed
 
 data Ship = Ship { _shipPosition :: (Double, Double), _shipThrust :: (Double, Double) } deriving (Eq, Show)
 
-data Thing = Thing { _thingRect :: (BLRect Int), _thingColor :: (C.T3 Double) }
+data Thing = Thing { _thingRect :: BLRect Int, _thingColor :: C.T3 Double }
 data World = World { _worldBox :: BLRect Int, _worldScenery :: [Thing] }
 
 isThrusting = (/= (0,0)) . _shipThrust
@@ -44,7 +44,7 @@ world = World (BLRect 0 10 C.width (C.height - 10)) [
                                                    , Thing (BLRect 350 550 20 20) C.yellow
                                                    ]
 
-timeCycle = fmap (`mod'` 24) (timeFrom 0)
+timeCycle = fmap ((`mod'` 24) . (+12)) (timeFrom 0)
 
 -- init: 0 12 24
 --  -12: -12 0 12
@@ -53,16 +53,28 @@ fractionToNight hour = abs (hour - 12) / 12
 
 skyColor = arr (\dt -> C.dayColor + (C.nightColor - C.dayColor) ^* fractionToNight dt)
 
+starsW :: (Monoid e, Monad m, MonadRandom m) => (Int, Int) -> Wire e m a [(Int, Int)]
+starsW (w, h) = timeCycle >>> (id &&& randomPositions) >>> accum changeStars mempty
+  where changeStars oldStars (h, newStar) | h > 19 = newStar:oldStars
+                                                | h < 5 = if null oldStars then oldStars else tail oldStars
+                                                | otherwise = []
+
+randomPositions :: MonadRandom m => Wire e m a (Int, Int)
+randomPositions = proc wat -> do
+  v <- noiseRM -< (0,400)
+  z <- noiseRM -< (0, 600)
+  returnA -< (v, z)
+
 main :: IO ()
 main = SDL.withInit [SDL.InitEverything] $ do
   screen <- SDL.setVideoMode C.width C.height 32 [SDL.SWSurface]
   let shipThing = runShip (C.shipW, C.shipH) world 
-  go mempty screen clockSession (shipThing &&& (sampleFPS 1) &&& (timeCycle >>> skyColor))
+  go mempty screen clockSession (shipThing &&& sampleFPS 1 &&& (timeCycle >>> skyColor) &&& starsW (C.width, C.height))
  where
   go keysDown screen s w = do
     let draw = paintRect screen C.height
     keysDown' <- parseEvents keysDown
-    (((ship, groundSide, boosted), (fps, sky)), w', s') <- stepSession_ w s keysDown'
+    (((ship, groundSide, boosted), (fps, (sky, stars))), w', s') <- stepSession_ w s keysDown'
 
     forM_ fps print
 
@@ -73,6 +85,7 @@ main = SDL.withInit [SDL.InitEverything] $ do
 
     -- The backdrop
     paintScreen screen sky
+    forM_ stars $ \(x,y) -> draw (lerp sky (255,255,255) ((fromIntegral y / fromIntegral C.height) ^ 2)) $ BLRect x y 2 2
     forM_ (_worldScenery world) $ \(Thing r c) -> draw c r
 
     let ground = case groundSide of
@@ -80,6 +93,7 @@ main = SDL.withInit [SDL.InitEverything] $ do
                    R -> BLRect (C.width - 10) 0 10 C.height
                    T -> BLRect 0 (C.height - 10) C.width 10
                    B -> BLRect 0 0 C.width 10
+
 
     draw (0, 200, 0) ground
 
@@ -114,14 +128,14 @@ runShip shipSize world = proc keysDown -> do
   returnA -< (Ship pos thrust, g, boost)
 
 boostAccel :: Monad m => Wire e m (Set SDL.Keysym) Bool 
-boostAccel = fmap (keyDown SDL.SDLK_LSHIFT) id
+boostAccel = arr (keyDown SDL.SDLK_LSHIFT)
 
 acceleration :: (Monad m, Monoid e) => Wire e m (Set SDL.Keysym) (Double, Double)
 acceleration  = 100 *^ (
-                  (if' (keyDown SDL.SDLK_LEFT) (pure (-1, 0)) (pure (0,0)))
-                + (if' (keyDown SDL.SDLK_RIGHT) (pure (1, 0)) (pure (0,0)))
-                + (if' (keyDown SDL.SDLK_UP) (pure (0, 3)) (pure (0,0)))
-                + (if' (keyDown SDL.SDLK_DOWN) (pure (0, -3)) (pure (0,0)))
+                  if' (keyDown SDL.SDLK_LEFT) (pure (-1, 0)) (pure (0,0))
+                + if' (keyDown SDL.SDLK_RIGHT) (pure (1, 0)) (pure (0,0))
+                + if' (keyDown SDL.SDLK_UP) (pure (0, 3)) (pure (0,0))
+                + if' (keyDown SDL.SDLK_DOWN) (pure (0, -3)) (pure (0,0))
                 )
 
 debug x = trace (show x) x
@@ -133,7 +147,7 @@ collisions (BLRect ix' iy iw ih) (BLRect ox oy ow oh) | ix' < ox = Just L
                                                      | iy + ih > oy + oh = Just T
                                                      | otherwise = Nothing
 
-collisions' me other = listToMaybe . filter (Prelude.all (\v -> v `within` other) . corners me) $ [L, R, T, B]
+collisions' me other = listToMaybe . filter (Prelude.all (`within` other) . corners me) $ [L, R, T, B]
 
 collisions'' me other = collisions' me other <|> fmap flip' (collisions' other me)
 
@@ -142,9 +156,6 @@ flip' R = L
 flip' T = B
 flip' B = T
 
-between z a b = z > a && z < b
-
-spaceShipObject :: (Scalar a0 ~ Double, Monad m0, Monoid e0, Num a0, Ord a0, Fractional a0, VectorSpace a0) => (Int, Int) -> Wire e0 m0 (ObjectDiff (a0, a0), World) (ObjectState (a0, a0))
 spaceShipObject (sizeX, sizeY) = object_ postUpdate (ObjectState (100, 200 - realToFrac sizeY/2) (0,10))
   where postUpdate world (ObjectState pos vel@(vx, vy)) = 
            let shipBox' = centerAndSizeToRect pos (realToFrac sizeX, realToFrac sizeY)
@@ -180,8 +191,6 @@ keyDown :: SDL.SDLKey -> Set SDL.Keysym -> Bool
 keyDown k = not . Set.null . Set.filter ((== k) . SDL.symKey)
 
 deriving instance Ord SDL.Keysym
-
-uncurry3 f (a,b,c) = f a b c
 
 -- TODO
 -- Good collision detection using a priority queue
