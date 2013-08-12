@@ -1,10 +1,12 @@
 module Config where
 
+import Data.VectorSpace
+
 type T3 a = (a,a,a)
 
 nightColor, dayColor :: T3 Double
 nightColor = black
-dayColor = niceSky
+dayColor = niceSky ^* 0.5
 
 height, width, shipW, shipH :: Int
 height = 600

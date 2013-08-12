@@ -5,7 +5,7 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 module SDLTemplate where
 
-import qualified Control.Monad as M (when)
+import qualified Control.Monad as M (when, forever)
 import Data.Maybe (listToMaybe)
 import qualified Config as C
 import Graphics
@@ -46,11 +46,10 @@ gravity B = (0, -1) ^* gravityMagnitude
 data Game = Game { shipSize :: (Int, Int) , screenWidth :: Int , screenHeight :: Int }
 
 world = World (BLRect 0 10 C.width (C.height - 10)) [
-                                                     Thing (BLRect 200 0 15 350) C.goldenRod
-                                                   , Thing (BLRect 350 550 20 20) C.yellow
+                                                     Thing (BLRect 190 0 30 350) C.goldenRod
                                                    ]
 
-timeCycle = fmap ((`mod'` 24) . (+12)) (timeFrom 0)
+timeCycle = fmap ((`mod'` 24) . (+17)) (timeFrom 0)
 
 -- init: 0 12 24
 --  -12: -12 0 12
@@ -61,8 +60,8 @@ skyColor = arr (\dt -> C.dayColor + (C.nightColor - C.dayColor) ^* fractionToNig
 
 starsW :: (Monoid e, Monad m, MonadRandom m) => (Int, Int) -> Wire e m a [(Int, Int)]
 starsW (w, h) = timeCycle >>> (id &&& randomPositions) >>> accum changeStars mempty
-  where changeStars oldStars (h, newStar) | h > 19 = newStar:oldStars
-                                                | h < 5 = if null oldStars then oldStars else tail oldStars
+  where changeStars oldStars (h, newStar) | h > 17.5 = newStar:oldStars
+                                                | h < 6 = if null oldStars then oldStars else tail oldStars
                                                 | otherwise = []
 
 randomPositions :: MonadRandom m => Wire e m a (Int, Int)
@@ -97,7 +96,7 @@ main = SDL.withInit [SDL.InitEverything] $ do
                    B -> BLRect 0 0 C.width 10
     draw (209, 223, 188) ground
 
-    let handleShip img ship boosted victory = do
+    let handleShip ship boosted victory = do
         wiggle <- if _shipThrust ship /= (0,0)
                     then randomRIO (-2, 2)
                     else return 0
@@ -115,18 +114,21 @@ main = SDL.withInit [SDL.InitEverything] $ do
 
         -- Draw Thrusters
         let (tx, ty) = _shipThrust
-
         let thrustColor = if not boosted then (200,50,0) else (255, 100, 0)
         forM_ (thrusters sizeX' sizeY' tx ty boosted) (draw thrustColor . moveRelativeTo (leftEdge, bottomEdge))
 
-    let winFor1 = maybe 
-    handleShip image ship1 boosted1 $ victory
-    handleShip image ship2 boosted2 $ fmap not victory
+    handleShip ship1 boosted1 $ victory
+    handleShip ship2 boosted2 $ fmap not victory
 
     SDL.flip screen
+
     case victory of
-      Nothing -> go image keysDown' screen s' w'
-      Just _ -> go image keysDown' screen s' ((for 1 . pure state) <|> w')
+      Nothing -> go image keysDown' screen s' w' Nothing
+      Just _ -> case holding of
+                  Nothing -> go image keysDown' screen s' w' $ Just (150, (state, w', s'))
+                  Just (v, s) -> if (v-1) == 0 
+                                   then return ()
+                                   else go image keysDown' screen s' w' $ Just (v-1, s)
 
 rectForCenter pos (sizeX', sizeY') = let (left, bottom) =  over both round pos - over both (`div` 2) (sizeX', sizeY')
                                       in BLRect left bottom sizeX' sizeY'
