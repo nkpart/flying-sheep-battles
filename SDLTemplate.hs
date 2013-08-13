@@ -3,6 +3,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE ImplicitParams #-}
 module SDLTemplate where
 
 import qualified Control.Monad as M (when, forever)
@@ -58,6 +59,31 @@ fractionToNight hour = abs (hour - 12) / 12
 
 skyColor = arr (\dt -> C.dayColor + (C.nightColor - C.dayColor) ^* fractionToNight dt)
 
+cloudRects w d  = [
+                 BLRect d 0 (w - 2 * d) (d `div` 2),
+                 BLRect 0 (d `div` 2) w d,
+                 BLRect d (d + d `div` 2) (w - 2 * d) (d `div` 2)
+                 ]
+
+data Cloud = Cloud (ObjectState (Double, Double)) Int
+
+cloudGen =  proc wat -> do
+  y <- noiseRM -< (500 :: Double, 600 :: Double)
+  w <- noiseRM -< (30 :: Int, 85 :: Int)
+  returnA -< Cloud (ObjectState (y, 0 - fromIntegral w) (5,0)) w
+
+cloudWire (Cloud state width) = fmap (\s -> Cloud s width) $ object_ (const id) state
+
+cloudMaker = clouds . (event $ periodically 5 . cloudGen)
+
+cloudSystem = proc xxx -> do
+  xs <- cloudMaker -< xxx
+  moved <- ?a -< xs
+  returnA -< moved
+
+clouds :: Wire e m (Maybe a) [a]
+clouds = accum (\v c -> maybe v (:v) c) []
+
 starsW :: (Monoid e, Monad m, MonadRandom m) => (Int, Int) -> Wire e m a [(Int, Int)]
 starsW (w, h) = timeCycle >>> (id &&& randomPositions) >>> accum changeStars mempty
   where changeStars oldStars (h, newStar) | h > 17.5 = newStar:oldStars
@@ -75,18 +101,26 @@ main = SDL.withInit [SDL.InitEverything] $ do
   screen <- SDL.setVideoMode C.width C.height 32 [SDL.SWSurface]
   sheep <- SDLI.load "sheep.png"
   let shipThing = runShip (C.shipW, C.shipH) world 
-  go sheep mempty screen clockSession (shipThing &&& sampleFPS 1 &&& (timeCycle >>> skyColor) &&& starsW (C.width, C.height))
+  M.forever $
+    go sheep mempty screen clockSession (shipThing &&& sampleFPS 1 &&& (timeCycle >>> skyColor) &&& starsW (C.width, C.height)) Nothing
  where
-  go image keysDown screen s w = do
+  go image keysDown screen s w holding = do
     let draw = paintRect screen C.height
     keysDown' <- parseEvents keysDown
-    (state@(((ship1, boosted1), (ship2, boosted2), groundSide, victory), (fps, (sky, stars))), w', s') <- stepSession_ w s keysDown'
+    let keysDown'' = keysDown' -- Set.insert (SDL.Keysym SDL.SDLK_RSHIFT [] ' ') keysDown'
+    (state@(((ship1, boosted1), (ship2, boosted2), groundSide, victory), (fps, (sky, stars))), w', s') <-
+      case holding of
+        Just (count, s) -> return s
+        _ -> stepSession_ w s keysDown''
 
     forM_ fps print
 
     -- The backdrop
     paintScreen screen sky
     forM_ stars $ \(x,y) -> draw (lerp sky (255,255,255) ((fromIntegral y / fromIntegral C.height) ^ 2)) $ BLRect x y 2 2
+
+    forM_ (map (moveRelativeTo (10, 500)) $ cloudRects 100 20) $ draw (255, 255, 255)
+    
     forM_ (_worldScenery world) $ \(Thing r c) -> draw c r
 
     let ground = case groundSide of
