@@ -20,15 +20,15 @@ Executable sdltemplate
   C-Sources:         mainc.c
   Ghc-options:       -no-hs-main
   Build-depends:     base
-                   , SDL
-                   , SDL-image
-                   , cabal-macosx
-                   , FindBin
-                   , filepath
-                   , containers
-                   , netwire
-                   , lens
-                   , newtype
-                   , vector-space
-                   , transformers
+                   , SDL >= 0.6.5
+                   , SDL-image >= 0.6.1
+                   , cabal-macosx >= 0.2.2
+                   , FindBin >= 0.0.5
+                   , filepath >= 1.3.0.1
+                   , containers >= 0.5
+                   , netwire >= 4.0.7
+                   , lens >= 3.9.0.2
+                   , newtype >= 0.2
+                   , vector-space >= 0.8.6
+                   , transformers >= 0.3.0.0
 
