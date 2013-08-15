@@ -6,17 +6,18 @@
 {-# LANGUAGE ImplicitParams #-}
 module SDLTemplate where
 
-import qualified Control.Monad as M (when, forever)
+import Data.Fixed
+import qualified Control.Monad as M (forever)
 import Data.Maybe (listToMaybe)
 import qualified Config as C
 import Graphics
 import Wires
-import Control.Lens hiding (within)
+import Control.Lens hiding (within, perform)
 import Data.VectorSpace hiding (Sum)
 import Data.Monoid
-import Data.Foldable (forM_, asum)
+import Data.Foldable (forM_, asum, mapM_)
 import Debug.Trace (trace)
-import Prelude hiding ((.), id)
+import Prelude hiding ((.), id, mapM_)
 import Control.Wire hiding (empty)
 import qualified Data.Set as Set (insert, null, filter, toList, fromList)
 import Data.Set (Set)
@@ -24,19 +25,25 @@ import Data.List as List (deleteBy)
 import Data.Function (on)
 import qualified Graphics.UI.SDL as SDL
 import qualified Graphics.UI.SDL.Image as SDLI
-import Data.Fixed
 
 data Ship = Ship { _shipPosition :: (Double, Double), _shipThrust :: (Double, Double), _shipVelocity :: (Double, Double) } deriving (Eq, Show)
 
 data Thing = Thing { _thingRect :: BLRect Int, _thingColor :: C.T3 Double }
 data World = World { _worldBox :: BLRect Int, _worldScenery :: [Thing] }
 
-data Controls = Controls { _controlsLeft :: SDL.SDLKey, _controlsRight :: SDL.SDLKey, _controlsUp :: SDL.SDLKey, _controlsDown :: SDL.SDLKey, _controlsBoost :: SDL.SDLKey }
+data Controls = Controls { 
+                _controlsLeft :: SDL.SDLKey
+              , _controlsRight :: SDL.SDLKey
+              , _controlsUp :: SDL.SDLKey
+              , _controlsDown :: SDL.SDLKey
+              , _controlsBoost :: SDL.SDLKey 
+              }
 
+-- WASD + lshift
 player1 = Controls SDL.SDLK_a SDL.SDLK_d SDL.SDLK_w SDL.SDLK_s SDL.SDLK_LSHIFT
-player2 = Controls SDL.SDLK_LEFT SDL.SDLK_RIGHT SDL.SDLK_UP SDL.SDLK_DOWN SDL.SDLK_RSHIFT
 
-isThrusting = (/= (0,0)) . _shipThrust
+-- UDLR + rshift
+player2 = Controls SDL.SDLK_LEFT SDL.SDLK_RIGHT SDL.SDLK_UP SDL.SDLK_DOWN SDL.SDLK_RSHIFT
 
 gravityMagnitude = 240
 gravity L = (-1, 0) ^* gravityMagnitude
@@ -49,9 +56,6 @@ data Game = Game { shipSize :: (Int, Int) , screenWidth :: Int , screenHeight ::
 world = World (BLRect 0 10 C.width (C.height - 10)) [
                                                      Thing (BLRect 190 0 30 350) C.goldenRod
                                                    ]
-
-timeCycle = fmap ((`mod'` 24) . (+17)) (timeFrom 0)
-
 -- init: 0 12 24
 --  -12: -12 0 12
 --  abs: 12 0 12
@@ -84,6 +88,8 @@ cloudSystem = proc xxx -> do
 clouds :: Wire e m (Maybe a) [a]
 clouds = accum (\v c -> maybe v (:v) c) []
 
+timeCycle = fmap ((`mod'` 24) . (+17)) (timeFrom 0)
+
 starsW :: (Monoid e, Monad m, MonadRandom m) => (Int, Int) -> Wire e m a [(Int, Int)]
 starsW (w, h) = timeCycle >>> (id &&& randomPositions) >>> accum changeStars mempty
   where changeStars oldStars (h, newStar) | h > 17.5 = newStar:oldStars
@@ -102,33 +108,22 @@ main = SDL.withInit [SDL.InitEverything] $ do
   sheep <- SDLI.load "sheep.png"
   let shipThing = runShip (C.shipW, C.shipH) world 
   M.forever $
-    go sheep mempty screen clockSession (shipThing &&& sampleFPS 1 &&& (timeCycle >>> skyColor) &&& starsW (C.width, C.height)) Nothing
+    go sheep screen clockSession ((keysDownW >>> shipThing) &&& ((sampleFPS 1 >>^ (mapM_ print)) >>> perform) &&& (timeCycle >>> skyColor) &&& starsW (C.width, C.height)) Nothing
  where
-  go image keysDown screen s w holding = do
+  go image screen s w holding = do
     let draw = paintRect screen C.height
-    keysDown' <- parseEvents keysDown
-    let keysDown'' = keysDown' -- Set.insert (SDL.Keysym SDL.SDLK_RSHIFT [] ' ') keysDown'
-    (state@(((ship1, boosted1), (ship2, boosted2), groundSide, victory), (fps, (sky, stars))), w', s') <-
+    (state@(((ship1, boosted1), (ship2, boosted2), victory), (_, (sky, stars))), w', s') <-
       case holding of
-        Just (count, s) -> return s
-        _ -> stepSession_ w s keysDown''
-
-    forM_ fps print
+        Just (_, s) -> return s
+        Nothing -> stepSession_ w s ()
 
     -- The backdrop
     paintScreen screen sky
     forM_ stars $ \(x,y) -> draw (lerp sky (255,255,255) ((fromIntegral y / fromIntegral C.height) ^ 2)) $ BLRect x y 2 2
-
     forM_ (map (moveRelativeTo (10, 500)) $ cloudRects 100 20) $ draw (255, 255, 255)
-    
     forM_ (_worldScenery world) $ \(Thing r c) -> draw c r
-
-    let ground = case groundSide of
-                   L -> BLRect 0 0 10 C.height
-                   R -> BLRect (C.width - 10) 0 10 C.height
-                   T -> BLRect 0 (C.height - 10) C.width 10
-                   B -> BLRect 0 0 C.width 10
-    draw (209, 223, 188) ground
+    -- ground
+    draw (209, 223, 188) $ BLRect 0 0 C.width 10
 
     let handleShip ship boosted victory = do
         wiggle <- if _shipThrust ship /= (0,0)
@@ -157,12 +152,12 @@ main = SDL.withInit [SDL.InitEverything] $ do
     SDL.flip screen
 
     case victory of
-      Nothing -> go image keysDown' screen s' w' Nothing
+      Nothing -> go image screen s' w' Nothing
       Just _ -> case holding of
-                  Nothing -> go image keysDown' screen s' w' $ Just (150, (state, w', s'))
+                  Nothing -> go image screen s' w' $ Just (150, (state, w', s'))
                   Just (v, s) -> if (v-1) == 0 
                                    then return ()
-                                   else go image keysDown' screen s' w' $ Just (v-1, s)
+                                   else go image screen s' w' $ Just (v-1, s)
 
 rectForCenter pos (sizeX', sizeY') = let (left, bottom) =  over both round pos - over both (`div` 2) (sizeX', sizeY')
                                       in BLRect left bottom sizeX' sizeY'
@@ -182,7 +177,7 @@ runShip shipSize world = proc keysDown -> do
   (ship2, boost2) <- moveShip shipSize world player2 (300, 200) -< (keysDown, g)
   let stuffed = rectForCenter (_shipPosition ship1) shipSize `overlapping` rectForCenter (_shipPosition ship2) shipSize
   let ended = if stuffed then Just (ship1Wins ship1 ship2) else Nothing
-  returnA -< ((ship1, boost1), (ship2, boost2), g, ended)
+  returnA -< ((ship1, boost1), (ship2, boost2), ended)
 
 ship1Wins ship1 ship2 = let collisionVector = normalized $ _shipPosition ship1 - _shipPosition ship2
                             collisionForce v = abs . magnitude . project collisionVector $ _shipVelocity v 
@@ -250,6 +245,12 @@ parseEvents keysDown = do
     SDL.KeyUp k -> parseEvents (delete' k keysDown)
     SDL.Quit -> error "Thanks"
     _ -> parseEvents keysDown
+
+keysDownW :: Wire e IO a (Set SDL.Keysym)
+keysDownW = mkStateM mempty $ \_ (_, keys) -> do
+  newKeys <- parseEvents keys
+  -- let keysDown'' = keysDown' -- Set.insert (SDL.Keysym SDL.SDLK_RSHIFT [] ' ') keysDown'
+  return $ (Right newKeys, newKeys)
 
 -- Modifiers might change on key up. we don't care
 delete' k = Set.fromList . deleteBy ((==) `on` SDL.symKey) k . Set.toList

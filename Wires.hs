@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs #-}
 module Wires where
 
+import Data.Fixed
 import Control.Wire
 import Data.VectorSpace hiding (Sum)
 import Data.Monoid
@@ -18,3 +19,5 @@ sampleFPS secs = event (periodically secs . fmap (round . (1/)) dtime)
 
 if' :: (Monad m, Monoid e) => (a -> Bool) -> Wire e m a b -> Wire e m a b -> Wire e m a b 
 if' p a b = a . when p <|> b
+
+
