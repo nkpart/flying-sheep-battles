@@ -1,18 +1,20 @@
 {-# LANGUAGE DeriveFunctor #-}
 module Graphics where
 
+import Control.Applicative
 import Control.Monad as M
 import Graphics.UI.SDL as SDL
+import Data.Maybe (listToMaybe)
 
 data BLRect a = BLRect a a a a deriving (Eq, Show, Functor)
 
 data Edge = L | R | T | B deriving (Eq, Show)
 
-zzz screen r g b z = (SDL.mapRGB . SDL.surfaceGetPixelFormat) screen r g b >>= z
+paintWithRGB screen r g b z = (SDL.mapRGB . SDL.surfaceGetPixelFormat) screen r g b >>= z
 
-paintScreen screen (r, g, b) = zzz screen (round r) (round g) (round b) $ SDL.fillRect screen Nothing
+paintScreen screen (r, g, b) = paintWithRGB screen (round r) (round g) (round b) $ SDL.fillRect screen Nothing
 
-paintRect screen height (r, g, b) rect = M.void $ zzz screen (round r) (round g) (round b) $ SDL.fillRect screen (Just $ toSDLRect height rect)
+paintRect screen height (r, g, b) rect = M.void $ paintWithRGB screen (round r) (round g) (round b) $ SDL.fillRect screen (Just $ toSDLRect height rect)
 
 toSDLRect :: Int -> BLRect Int -> SDL.Rect
 toSDLRect height (BLRect x y w h) = SDL.Rect x (height - y - h) w h
@@ -37,3 +39,19 @@ corners r B = [bottomLeft r, bottomRight r]
 allCorners r = map (corners r) [L, R, T, B]
 
 overlapping a b = any (`within` b) (join $ allCorners a) || any (`within` a) (join $ allCorners b)
+
+findEdgeWithin me other = listToMaybe . filter (Prelude.all (`within` other) . corners me) $ [L, R, T, B]
+
+flipEdge L = R
+flipEdge R = L
+flipEdge T = B
+flipEdge B = T
+
+overlappingEdge me other = findEdgeWithin me other <|> fmap flipEdge (findEdgeWithin other me)
+
+boundsCheck :: (Ord a, Num a) => BLRect a -> BLRect a -> Maybe Edge
+boundsCheck (BLRect ix' iy iw ih) (BLRect ox oy ow oh) | ix' < ox = Just L
+                                                     | ix' + iw > ox + ow = Just R
+                                                     | iy < oy = Just B
+                                                     | iy + ih > oy + oh = Just T
+                                                     | otherwise = Nothing
