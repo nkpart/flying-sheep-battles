@@ -1,7 +1,6 @@
 {-# LANGUAGE GADTs #-}
 module Wires where
 
-import Data.Fixed
 import Control.Wire
 import Data.VectorSpace hiding (Sum)
 import Data.Monoid
