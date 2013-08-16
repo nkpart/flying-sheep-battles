@@ -148,7 +148,7 @@ main = SDL.withInit [SDL.InitEverything] $ do
     forM_ (map (moveRelativeTo (10, 500)) $ cloudRects 100 20) $ draw (255, 255, 255)
     forM_ (_worldScenery world) $ \(Thing r c) -> draw c $ fmap round r
     -- ground
-    draw (209, 223, 188) $ BLRect 0 0 C.width 10
+    draw C.groundColor $ BLRect 0 0 C.width 10
 
     let handleShip ship isDead = do
         wiggle <- if _shipThrust ship /= (0,0)
