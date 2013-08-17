@@ -5,6 +5,7 @@
 {-# LANGUAGE ImplicitParams #-}
 module SDLTemplate where
 
+import FSB.SDL.Renderer
 import Data.Maybe (mapMaybe)
 import Data.Fixed
 import qualified Control.Monad as M (when, unless, forever)
@@ -55,12 +56,6 @@ fractionToNight hour = abs (hour - 12) / 12
 
 skyColor dt = C.dayColor + (C.nightColor - C.dayColor) ^* fractionToNight dt
 
-cloudRects w d  = [
-                 BLRect d 0 (w - 2 * d) (d `div` 2),
-                 BLRect 0 (d `div` 2) w d,
-                 BLRect d (d + d `div` 2) (w - 2 * d) (d `div` 2)
-                 ]
-
 data Cloud = Cloud (ObjectState (Double, Double)) Int
 
 cloudGen =  proc wat -> do
@@ -99,38 +94,6 @@ world = World (BLRect 0 10 (realToFrac C.width) (realToFrac $ C.height - 10)) [
 shipSim = GameState <$> (keysDownW >>> runShips (C.shipW, C.shipH) world)
 skySim = Sky <$> (timeCycle >>^ skyColor) <*> starsW (C.width, C.height)
 
-drawWorld screen (Sky sky stars) = do
-  let draw = paintRect screen C.height
-  paintScreen screen sky
-  forM_ stars $ \(x,y) -> draw (lerp sky (255,255,255) ((fromIntegral y / fromIntegral C.height) ^ 2)) $ BLRect x y 2 2
-  forM_ (map (moveRelativeTo (10, 500)) $ cloudRects 100 20) $ draw (255, 255, 255)
-  forM_ (_worldScenery world) $ \(Thing r c) -> draw c $ fmap round r
-  -- ground
-  draw C.groundColor $ BLRect 0 0 C.width 10
-
-  return ()
-
-drawShip screen image ship isDead = do
-  let draw = paintRect screen C.height
-  wiggle <- if _shipThrust ship /= (0,0)
-              then randomRIO (-2, 2)
-              else return 0
-  let wiggledSize = over both (+ wiggle * 2) (C.shipW, C.shipH)
-
-  let (Ship {..}) = ship
-  let rect@(BLRect leftEdge bottomEdge _ _)  = rectForCenter (_shipPosition ship) wiggledSize
-  SDL.blitSurface image Nothing screen $ Just $ toSDLRect C.height rect
-  M.when isDead $ draw (255, 0, 0) $ BLRect leftEdge bottomEdge C.shipW 10
-
-  -- Draw Thrusters
-  let thrustColor = if not _shipBoosting then (200,50,0) else (255, 100, 0)
-  forM_ (thrusters wiggledSize _shipThrust _shipBoosting) (draw thrustColor . moveRelativeTo (leftEdge, bottomEdge))
-
-drawGame screen image (GameState (ship1, ship2, victory)) sky = do
-  drawWorld screen sky
-  drawShip screen image ship1 $ maybe False not victory
-  drawShip screen image ship2 $ maybe False id  victory
-  SDL.flip screen
 
 data Loop = TapToStart
           | Play
@@ -148,7 +111,7 @@ main = SDL.withInit [SDL.InitEverything] $ do
  where
   victory screen image state sky s w = do
     (done, w', s') <- stepSession_ w s ()
-    drawGame screen image state sky
+    drawGame screen image world state sky
     if not done
       then victory screen image state sky s' w'
       else return Play
@@ -157,18 +120,9 @@ main = SDL.withInit [SDL.InitEverything] $ do
     (state@(GameState (_, _, checkVictory), _), w', s') <- stepSession_ w s ()
     case checkVictory of
       Nothing -> do
-        drawGame screen image `uncurry` state
+        drawGame screen image world `uncurry` state
         play image screen s' w'
       Just _ -> return $ ShowVictory `uncurry` state
-
-thrusters (sizeX', sizeY') (tx, ty) boosted = map snd . filter fst $ [
-         (tx > 0 , BLRect (-sizeO) ((sizeY' `div` 2) - (size `div` 2)) sizeO size)
-       , (tx < 0 , BLRect sizeX' ((sizeY' `div` 2) - (size `div` 2)) sizeO size)
-       , (ty > 0 , BLRect ((sizeX' `div` 2) - (size `div` 2)) (-sizeO) size sizeO)
-       , (ty < 0 , BLRect ((sizeX' `div` 2) - (size `div` 2)) sizeY' size sizeO)
-     ]
-     where size = if boosted then 12 else 10
-           sizeO = if boosted then 20 else 10
 
 applyControls f = mapMaybe f . Set.toList
 

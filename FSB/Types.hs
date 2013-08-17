@@ -3,7 +3,6 @@ module FSB.Types where
 import Prelude hiding ((.), id, mapM_, elem)
 import Graphics
 import Control.Wire
-import Graphics.UI.SDL as SDL
 
 type T3 a = (a,a,a)
 
@@ -34,7 +33,5 @@ data ThrustControl = ThrustUp
                    | ThrustRight
                    | ThrustBoost
                    deriving (Eq, Show)
-
--- SDL types?
 
 type Controls a = a -> Maybe ThrustControl

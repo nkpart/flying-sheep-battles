@@ -2,22 +2,12 @@
 module Graphics where
 
 import Control.Applicative
-import Control.Monad as M
-import Graphics.UI.SDL as SDL
+import Control.Monad (join)
 import Data.Maybe (listToMaybe)
 
 data BLRect a = BLRect a a a a deriving (Eq, Show, Functor)
 
 data Edge = L | R | T | B deriving (Eq, Show)
-
-paintWithRGB screen r g b z = (SDL.mapRGB . SDL.surfaceGetPixelFormat) screen r g b >>= z
-
-paintScreen screen (r, g, b) = paintWithRGB screen (round r) (round g) (round b) $ SDL.fillRect screen Nothing
-
-paintRect screen height (r, g, b) rect = M.void $ paintWithRGB screen (round r) (round g) (round b) $ SDL.fillRect screen (Just $ toSDLRect height rect)
-
-toSDLRect :: Int -> BLRect Int -> SDL.Rect
-toSDLRect height (BLRect x y w h) = SDL.Rect x (height - y - h) w h
 
 centerAndSizeToRect :: (Fractional a, Num a) => (a, a) -> (a, a) -> BLRect a
 centerAndSizeToRect (x,y) (w,h) = BLRect (x - w / 2) (y - h / 2) w h 
