@@ -5,25 +5,24 @@
 {-# LANGUAGE ImplicitParams #-}
 module SDLTemplate where
 
-import FSB.SDL.Renderer
+import FSB.Renderer.SDL (initRenderer)
 import Data.Maybe (mapMaybe)
 import Data.Fixed
-import qualified Control.Monad as M (when, unless, forever)
 import qualified Config as C
 import Graphics
 import Wires
 import Control.Lens hiding (within, perform)
 import Data.VectorSpace hiding (Sum, getSum)
 import Data.Monoid 
-import Data.Foldable (forM_, asum, mapM_, foldMap, elem)
+import Data.Foldable (asum, mapM_, foldMap, elem)
 import Debug.Trace (trace)
 import Prelude hiding ((.), id, mapM_, elem)
 import Control.Wire hiding (empty)
 import qualified Data.Set as Set (insert, toList, delete)
 import Data.Set (Set)
-import qualified Graphics.UI.SDL as SDL
-import qualified Graphics.UI.SDL.Image as SDLI
 import FSB.Types
+import Graphics.UI.SDL as SDL
+import FSB.Renderer
 
 player1 :: Controls SDL.SDLKey
 player1 v = case v of
@@ -101,35 +100,33 @@ data Loop = TapToStart
 
 main :: IO ()
 main = SDL.withInit [SDL.InitEverything] $ do
-  screen <- SDL.setVideoMode C.width C.height 32 [SDL.SWSurface]
-  sheep <- SDLI.load "sheep.png"
-  let loop Play = loop =<< (play sheep screen clockSession $ shipSim &&& skySim
+  renderer <- initRenderer
+  let loop Play = loop =<< (play renderer clockSession $ shipSim &&& skySim
                                                                <* ((sampleFPS 1.0 >>^ mapM_ print) >>> perform))
-      loop (ShowVictory gameState sky) = loop =<< (victory screen sheep gameState sky clockSession $ fmap (> 3) $ timeFrom 0)
+      loop (ShowVictory gameState sky) = loop =<< (victory renderer gameState sky clockSession $ fmap (> 3) $ timeFrom 0)
   loop Play
   return ()
  where
-  victory screen image state sky s w = do
+  victory renderer state sky s w = do
     (done, w', s') <- stepSession_ w s ()
-    drawGame screen image world state sky
+    render renderer world state sky
     if not done
-      then victory screen image state sky s' w'
+      then victory renderer state sky s' w'
       else return Play
 
-  play image screen s w = do
+  play renderer s w = do
     (state@(GameState (_, _, checkVictory), _), w', s') <- stepSession_ w s ()
     case checkVictory of
       Nothing -> do
-        drawGame screen image world `uncurry` state
-        play image screen s' w'
+        render renderer world `uncurry` state
+        play renderer s' w'
       Just _ -> return $ ShowVictory `uncurry` state
 
 applyControls f = mapMaybe f . Set.toList
 
 runShips shipSize world = proc keysDown -> do
-  g <- gravity <$> gravityEdge -< keysDown
-  ship1 <- shipWire shipSize world (100, 200) -< (applyControls player1 keysDown, g)
-  ship2 <- shipWire shipSize world (300, 200) -< (applyControls player2 keysDown, g)
+  ship1 <- shipWire shipSize world (100, 200) -< (applyControls player1 keysDown)
+  ship2 <- shipWire shipSize world (300, 200) -< (applyControls player2 keysDown)
   let stuffed = rectForCenter (_shipPosition ship1) shipSize `overlapping` rectForCenter (_shipPosition ship2) shipSize
   let ended = if stuffed then Just (ship1Wins ship1 ship2) else Nothing
   returnA -< (ship1, ship2, ended)
@@ -138,10 +135,10 @@ ship1Wins ship1 ship2 = let collisionVector = normalized $ _shipPosition ship1 -
                             collisionForce ship = abs . magnitude . project collisionVector $ _shipVelocity ship
                         in collisionForce ship1 > collisionForce ship2
 
-shipWire shipSize world initPos = proc (controls, g) -> do
+shipWire shipSize world initPos = proc (controls) -> do
   let thrust = acceleration controls
   let boost = ThrustBoost `elem` controls
-  s <- spaceShipObject shipSize initPos -< (Accelerate ((thrust * if boost then 2.5 else 1.0) + g), world)
+  s <- spaceShipObject shipSize initPos -< (Accelerate (thrust * if boost then 2.5 else 1.0), world)
   returnA -< (Ship s thrust boost)
 
 objectDiffForControls controls g = let thrust = acceleration controls

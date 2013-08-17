@@ -1,15 +1,27 @@
 {-# LANGUAGE RecordWildCards #-}
-module FSB.SDL.Renderer where
+module FSB.Renderer.SDL where
 
 import Prelude hiding ((.), id)
 import Control.Lens (over, both)
-import Config as C
 import FSB.Types
+import Config as C
 import Graphics
 import Control.Monad as M (forM_, when, void)
 import Data.VectorSpace
 import Control.Wire
 import qualified Graphics.UI.SDL as SDL
+import qualified Graphics.UI.SDL.Image as SDLI
+
+import FSB.Renderer
+
+data SDLRenderer = SDLRenderer {
+                    _screen :: SDL.Surface,
+                    _sheep :: SDL.Surface
+                  }
+
+initRenderer = do
+    r <- SDLRenderer <$> (SDL.setVideoMode C.width C.height 32 [SDL.SWSurface]) <*> SDLI.load "sheep.png"
+    return $ Renderer (drawGame r)
 
 cloudRects w d  = [
                  BLRect d 0 (w - 2 * d) (d `div` 2),
@@ -17,7 +29,8 @@ cloudRects w d  = [
                  BLRect d (d + d `div` 2) (w - 2 * d) (d `div` 2)
                  ]
 
-drawWorld screen world (Sky sky stars) = do
+drawWorld renderer world (Sky sky stars) = do
+  let screen = _screen renderer
   let draw = paintRect screen C.height
   paintScreen screen sky
   forM_ stars $ \(x,y) -> draw (lerp sky (255,255,255) ((fromIntegral y / fromIntegral C.height) ^ 2)) $ BLRect x y 2 2
@@ -42,8 +55,10 @@ drawShip screen image ship isDead = do
   let thrustColor = if not _shipBoosting then (200,50,0) else (255, 100, 0)
   forM_ (thrusters wiggledSize _shipThrust _shipBoosting) (draw thrustColor . moveRelativeTo (leftEdge, bottomEdge))
 
-drawGame screen image world (GameState (ship1, ship2, victory)) sky = do
-  drawWorld screen world sky
+drawGame renderer world (GameState (ship1, ship2, victory)) sky = do
+  let screen = _screen renderer
+  let image = _sheep renderer
+  drawWorld renderer world sky
   drawShip screen image ship1 $ maybe False not victory
   drawShip screen image ship2 $ maybe False id  victory
   SDL.flip screen
