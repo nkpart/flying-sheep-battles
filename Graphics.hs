@@ -55,3 +55,5 @@ boundsCheck (BLRect ix' iy iw ih) (BLRect ox oy ow oh) | ix' < ox = Just L
                                                      | iy < oy = Just B
                                                      | iy + ih > oy + oh = Just T
                                                      | otherwise = Nothing
+
+rectForCenter (x,y) (sizeX', sizeY') = BLRect (round x - sizeX' `div` 2) (round y - sizeY' `div` 2) sizeX' sizeY'

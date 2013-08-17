@@ -1,12 +1,10 @@
 module Config where
 
-import Data.VectorSpace
-
-type T3 a = (a,a,a)
+import FSB.Types
 
 nightColor, dayColor, groundColor :: T3 Double
 nightColor = black
-dayColor = niceSky' -- ^* 0.5
+dayColor = niceSky'
 groundColor = badAss
 
 height, width, shipW, shipH :: Int

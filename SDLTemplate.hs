@@ -22,53 +22,31 @@ import qualified Data.Set as Set (insert, toList, delete)
 import Data.Set (Set)
 import qualified Graphics.UI.SDL as SDL
 import qualified Graphics.UI.SDL.Image as SDLI
+import FSB.Types
 
-data Ship = Ship { 
-          _shipPosition :: (Double, Double), 
-          _shipThrust :: (Double, Double), 
-          _shipVelocity :: (Double, Double),
-          _shipBoosting :: Bool
-        } deriving (Eq, Show)
-
-data Thing = Thing { _thingRect :: BLRect Double, _thingColor :: C.T3 Double }
-data World = World { _worldBox :: BLRect Double, _worldScenery :: [Thing] }
-
-data ThrustControl = ThrustUp
-                   | ThrustDown
-                   | ThrustLeft
-                   | ThrustRight
-                   | ThrustBoost
-                   deriving (Eq, Show)
-
-type Controls = Set SDL.SDLKey -> [ThrustControl]
-
-player1 :: Controls
-player1 = mapMaybe f . Set.toList
-        where f SDL.SDLK_a = Just ThrustLeft
-              f SDL.SDLK_d = Just ThrustRight
-              f SDL.SDLK_s = Just ThrustDown
-              f SDL.SDLK_w = Just ThrustUp
-              f SDL.SDLK_LSHIFT = Just ThrustBoost
-              f _ = Nothing
+player1 :: Controls SDL.SDLKey
+player1 v = case v of
+              SDL.SDLK_a -> Just ThrustLeft
+              SDL.SDLK_d -> Just ThrustRight
+              SDL.SDLK_s -> Just ThrustDown
+              SDL.SDLK_w -> Just ThrustUp
+              SDL.SDLK_LSHIFT -> Just ThrustBoost
+              _ -> Nothing
     
-player2 :: Controls
-player2 = mapMaybe f . Set.toList
-        where f SDL.SDLK_LEFT = Just ThrustLeft
-              f SDL.SDLK_RIGHT = Just ThrustRight
-              f SDL.SDLK_DOWN = Just ThrustDown
-              f SDL.SDLK_UP = Just ThrustUp
-              f SDL.SDLK_RSHIFT = Just ThrustBoost
-              f _ = Nothing
-    
--- Controls SDL.SDLK_LEFT SDL.SDLK_RIGHT SDL.SDLK_UP SDL.SDLK_DOWN SDL.SDLK_RSHIFT
+player2 :: Controls SDL.SDLKey
+player2 v = case v of
+              SDL.SDLK_LEFT -> Just ThrustLeft
+              SDL.SDLK_RIGHT -> Just ThrustRight
+              SDL.SDLK_DOWN -> Just ThrustDown
+              SDL.SDLK_UP -> Just ThrustUp
+              SDL.SDLK_RSHIFT -> Just ThrustBoost
+              _ -> Nothing
 
 gravityMagnitude = 240
 gravity L = (-1, 0) ^* gravityMagnitude
 gravity R = (1, 0) ^* gravityMagnitude
 gravity T = (0, 1) ^* gravityMagnitude
 gravity B = (0, -1) ^* gravityMagnitude
-
-data Game = Game { shipSize :: (Int, Int) , screenWidth :: Int , screenHeight :: Int }
 
 -- init: 0 12 24
 --  -12: -12 0 12
@@ -106,79 +84,82 @@ clouds = accum (\v c -> maybe v (:v) c) []
 timeCycle = fmap ((`mod'` 24) . (+17)) (timeFrom 0)
 
 starsW :: (Monoid e, Monad m, MonadRandom m) => (Int, Int) -> Wire e m a [(Int, Int)]
-starsW (w, h) = timeCycle >>> (id &&& randomPositions) >>> accum changeStars mempty
+starsW skySize = timeCycle >>> (id &&& randomPositions skySize) >>> accum changeStars mempty
   where changeStars oldStars (h, newStar) | h > 17.5 = newStar:oldStars
                                                 | h < 6 = if null oldStars then oldStars else tail oldStars
                                                 | otherwise = []
 
-randomPositions :: MonadRandom m => Wire e m a (Int, Int)
-randomPositions = proc wat -> do
-  v <- noiseRM -< (0,400)
-  z <- noiseRM -< (0, 600)
-  returnA -< (v, z)
-
-type RGB = C.T3 Double
-
-data Sky = Sky RGB [(Int, Int)]
+randomPositions :: MonadRandom m => (Int, Int) -> Wire e m a (Int, Int)
+randomPositions (w,h) = (,) <$> (pure (0,w) >>> noiseRM) <*> (pure (0,h) >>> noiseRM)
 
 world = World (BLRect 0 10 (realToFrac C.width) (realToFrac $ C.height - 10)) [
                                                    Thing (BLRect 190 0 30 350) C.goldenRod
                                                  ]
 
+shipSim = GameState <$> (keysDownW >>> runShips (C.shipW, C.shipH) world)
+skySim = Sky <$> (timeCycle >>^ skyColor) <*> starsW (C.width, C.height)
+
+drawWorld screen (Sky sky stars) = do
+  let draw = paintRect screen C.height
+  paintScreen screen sky
+  forM_ stars $ \(x,y) -> draw (lerp sky (255,255,255) ((fromIntegral y / fromIntegral C.height) ^ 2)) $ BLRect x y 2 2
+  forM_ (map (moveRelativeTo (10, 500)) $ cloudRects 100 20) $ draw (255, 255, 255)
+  forM_ (_worldScenery world) $ \(Thing r c) -> draw c $ fmap round r
+  -- ground
+  draw C.groundColor $ BLRect 0 0 C.width 10
+
+  return ()
+
+drawShip screen image ship isDead = do
+  let draw = paintRect screen C.height
+  wiggle <- if _shipThrust ship /= (0,0)
+              then randomRIO (-2, 2)
+              else return 0
+  let wiggledSize = over both (+ wiggle * 2) (C.shipW, C.shipH)
+
+  let (Ship {..}) = ship
+  let rect@(BLRect leftEdge bottomEdge _ _)  = rectForCenter (_shipPosition ship) wiggledSize
+  SDL.blitSurface image Nothing screen $ Just $ toSDLRect C.height rect
+  M.when isDead $ draw (255, 0, 0) $ BLRect leftEdge bottomEdge C.shipW 10
+
+  -- Draw Thrusters
+  let thrustColor = if not _shipBoosting then (200,50,0) else (255, 100, 0)
+  forM_ (thrusters wiggledSize _shipThrust _shipBoosting) (draw thrustColor . moveRelativeTo (leftEdge, bottomEdge))
+
+drawGame screen image (GameState (ship1, ship2, victory)) sky = do
+  drawWorld screen sky
+  drawShip screen image ship1 $ maybe False not victory
+  drawShip screen image ship2 $ maybe False id  victory
+  SDL.flip screen
+
+data Loop = TapToStart
+          | Play
+          | ShowVictory GameState Sky
+
 main :: IO ()
 main = SDL.withInit [SDL.InitEverything] $ do
   screen <- SDL.setVideoMode C.width C.height 32 [SDL.SWSurface]
   sheep <- SDLI.load "sheep.png"
-  M.forever $
-    go sheep screen clockSession Nothing $ shipSim &&& skySim
-                                        <* ((sampleFPS 1.0 >>^ mapM_ print) >>> perform)
+  let loop Play = loop =<< (play sheep screen clockSession $ shipSim &&& skySim
+                                                               <* ((sampleFPS 1.0 >>^ mapM_ print) >>> perform))
+      loop (ShowVictory gameState sky) = loop =<< (victory screen sheep gameState sky clockSession $ fmap (> 3) $ timeFrom 0)
+  loop Play
+  return ()
  where
-  shipSim = keysDownW >>> runShips (C.shipW, C.shipH) world
-  skySim = Sky <$> (timeCycle >>^ skyColor) <*> starsW (C.width, C.height)
-  go image screen s holding w = do
-    let draw = paintRect screen C.height
-    (state@((ship1, ship2, victory), Sky sky stars), w', s') <-
-      case holding of
-        Just (_, v) -> return v
-        Nothing -> stepSession_ w s ()
+  victory screen image state sky s w = do
+    (done, w', s') <- stepSession_ w s ()
+    drawGame screen image state sky
+    if not done
+      then victory screen image state sky s' w'
+      else return Play
 
-    -- The backdrop
-    paintScreen screen sky
-    forM_ stars $ \(x,y) -> draw (lerp sky (255,255,255) ((fromIntegral y / fromIntegral C.height) ^ 2)) $ BLRect x y 2 2
-    forM_ (map (moveRelativeTo (10, 500)) $ cloudRects 100 20) $ draw (255, 255, 255)
-    forM_ (_worldScenery world) $ \(Thing r c) -> draw c $ fmap round r
-    -- ground
-    draw C.groundColor $ BLRect 0 0 C.width 10
-
-    let handleShip ship isDead = do
-        wiggle <- if _shipThrust ship /= (0,0)
-                    then randomRIO (-2, 2)
-                    else return 0
-        let wiggledSize = over both (+ wiggle * 2) (C.shipW, C.shipH)
-
-        -- Draw Ship
-        let (Ship {..}) = ship
-        let rect@(BLRect leftEdge bottomEdge _ _)  = rectForCenter _shipPosition wiggledSize
-        SDL.blitSurface image Nothing screen $ Just $ toSDLRect C.height rect
-        M.when isDead $ draw (255, 0, 0) $ BLRect leftEdge bottomEdge C.shipW 10
-
-        -- Draw Thrusters
-        let thrustColor = if not _shipBoosting then (200,50,0) else (255, 100, 0)
-        forM_ (thrusters wiggledSize _shipThrust _shipBoosting) (draw thrustColor . moveRelativeTo (leftEdge, bottomEdge))
-
-    handleShip ship1 $ maybe False id victory
-    handleShip ship2 $ maybe False not victory
-
-    SDL.flip screen
-
-    case victory of
-      Nothing -> go image screen s' Nothing w'
-      Just _ -> case holding of
-                  Nothing -> go image screen s' (Just (150, (state, w', s'))) w'
-                  Just (v, s) -> M.unless ((v - 1) == 0) $
-                                   go image screen s' (Just (v-1, s)) w'
-
-rectForCenter (x,y) (sizeX', sizeY') = BLRect (round x - sizeX' `div` 2) (round y - sizeY' `div` 2) sizeX' sizeY'
+  play image screen s w = do
+    (state@(GameState (_, _, checkVictory), _), w', s') <- stepSession_ w s ()
+    case checkVictory of
+      Nothing -> do
+        drawGame screen image `uncurry` state
+        play image screen s' w'
+      Just _ -> return $ ShowVictory `uncurry` state
 
 thrusters (sizeX', sizeY') (tx, ty) boosted = map snd . filter fst $ [
          (tx > 0 , BLRect (-sizeO) ((sizeY' `div` 2) - (size `div` 2)) sizeO size)
@@ -189,23 +170,29 @@ thrusters (sizeX', sizeY') (tx, ty) boosted = map snd . filter fst $ [
      where size = if boosted then 12 else 10
            sizeO = if boosted then 20 else 10
 
+applyControls f = mapMaybe f . Set.toList
+
 runShips shipSize world = proc keysDown -> do
   g <- gravity <$> gravityEdge -< keysDown
-  ship1 <- shipWire shipSize world (100, 200) -< (player1 keysDown, g)
-  ship2 <- shipWire shipSize world (300, 200) -< (player2 keysDown, g)
+  ship1 <- shipWire shipSize world (100, 200) -< (applyControls player1 keysDown, g)
+  ship2 <- shipWire shipSize world (300, 200) -< (applyControls player2 keysDown, g)
   let stuffed = rectForCenter (_shipPosition ship1) shipSize `overlapping` rectForCenter (_shipPosition ship2) shipSize
   let ended = if stuffed then Just (ship1Wins ship1 ship2) else Nothing
   returnA -< (ship1, ship2, ended)
 
 ship1Wins ship1 ship2 = let collisionVector = normalized $ _shipPosition ship1 - _shipPosition ship2
-                            collisionForce v = abs . magnitude . project collisionVector $ _shipVelocity v 
+                            collisionForce ship = abs . magnitude . project collisionVector $ _shipVelocity ship
                         in collisionForce ship1 > collisionForce ship2
 
 shipWire shipSize world initPos = proc (controls, g) -> do
   let thrust = acceleration controls
   let boost = ThrustBoost `elem` controls
-  (ObjectState pos vel) <- spaceShipObject shipSize initPos -< (Accelerate ((thrust * if boost then 2.5 else 1.0) + g), world)
-  returnA -< (Ship pos thrust vel boost)
+  s <- spaceShipObject shipSize initPos -< (Accelerate ((thrust * if boost then 2.5 else 1.0) + g), world)
+  returnA -< (Ship s thrust boost)
+
+objectDiffForControls controls g = let thrust = acceleration controls
+                                       boost = ThrustBoost `elem` controls
+                                    in Accelerate ((thrust * if boost then 2.5 else 1.0) + g)
 
 acceleration = (100 *^) . getSum . foldMap Sum . map f
                 where f ThrustUp = (0, 3)
