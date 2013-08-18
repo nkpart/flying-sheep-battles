@@ -90,9 +90,10 @@ world = World (BLRect 0 10 (realToFrac C.width) (realToFrac $ C.height - 10)) [
                                                    Thing (BLRect 190 0 30 350) C.goldenRod
                                                  ]
 
-shipSim = GameState <$> (keysDownW >>> runShips (C.shipW, C.shipH) world)
-skySim = Sky <$> (timeCycle >>^ skyColor) <*> starsW (C.width, C.height)
+sdlThrustControl = keysDownW >>> (arr (applyControls player1) &&& arr (applyControls player2))
 
+shipSim thrustController = GameState <$> (thrustController >>> runShips (C.shipW, C.shipH) world)
+skySim = Sky <$> (timeCycle >>^ skyColor) <*> starsW (C.width, C.height)
 
 data Loop = TapToStart
           | Play
@@ -101,7 +102,8 @@ data Loop = TapToStart
 main :: IO ()
 main = SDL.withInit [SDL.InitEverything] $ do
   renderer <- initRenderer
-  let loop Play = loop =<< (play renderer clockSession $ shipSim &&& skySim
+  let thrustController = sdlThrustControl
+  let loop Play = loop =<< (play renderer clockSession $ shipSim thrustController &&& skySim
                                                                <* ((sampleFPS 1.0 >>^ mapM_ print) >>> perform))
       loop (ShowVictory gameState sky) = loop =<< (victory renderer gameState sky clockSession $ fmap (> 3) $ timeFrom 0)
   loop Play
@@ -124,9 +126,9 @@ main = SDL.withInit [SDL.InitEverything] $ do
 
 applyControls f = mapMaybe f . Set.toList
 
-runShips shipSize world = proc keysDown -> do
-  ship1 <- shipWire shipSize world (100, 200) -< (applyControls player1 keysDown)
-  ship2 <- shipWire shipSize world (300, 200) -< (applyControls player2 keysDown)
+runShips shipSize world = proc (controls1, controls2) -> do
+  ship1 <- shipWire shipSize world (100, 200) -< controls1 
+  ship2 <- shipWire shipSize world (300, 200) -< controls2
   let stuffed = rectForCenter (_shipPosition ship1) shipSize `overlapping` rectForCenter (_shipPosition ship2) shipSize
   let ended = if stuffed then Just (ship1Wins ship1 ship2) else Nothing
   returnA -< (ship1, ship2, ended)
@@ -164,14 +166,6 @@ spaceShipObject size initialPosition = object_ postUpdate (ObjectState initialPo
                                                    R -> (-(abs vx), vy)
                                                    T -> (vx, -(abs vy))
                                                    B -> (vx, abs vy)) collision
-
-gravityEdge :: Wire e m (Set SDL.SDLKey) Edge 
-gravityEdge = accum (\g keys -> if SDL.SDLK_q `elem` keys then rotate g else g) B
-            where rotate g = case g of
-                               B -> R
-                               R -> T
-                               T -> L
-                               L -> B
 
 keysDownW = mkStateM mempty $ \_ (_, keys) -> do
   newKeys <- parseEvents keys
