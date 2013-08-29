@@ -5,8 +5,15 @@ import Graphics
 import Control.Wire
 
 type T3 a = (a,a,a)
+type V2 a = (a,a)
 
-data Sky = Sky RGB [(Int, Int)]
+data Sky = Sky RGB [(Int, Int)] [Cloud]
+
+data Cloud = Cloud {
+             cloudWidth :: Int
+           , cloudHeight :: Int
+           , cloudPosition :: (Double, Double)
+}
 
 type RGB = T3 Double
 

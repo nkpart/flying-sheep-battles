@@ -20,8 +20,9 @@ Executable sdltemplate
   C-Sources:         mainc.c
   Ghc-options:       -no-hs-main
   Build-depends:     base
-                   , SDL >= 0.6.5
-                   , SDL-image >= 0.6.1
+                   , GLUtil
+                   , GLFW-b
+                   , OpenGL
                    , cabal-macosx >= 0.2.2
                    , FindBin >= 0.0.5
                    , filepath >= 1.3.0.1

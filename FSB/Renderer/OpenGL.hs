@@ -1,5 +1,8 @@
-{-# LANGUAGE RecordWildCards #-}
-module FSB.Renderer.SDL where
+module FSB.Renderer.OpenGL where
+
+import qualified Graphics.Rendering.OpenGL as GL
+import qualified Graphics.UI.GLFW as GLFW
+import qualified Graphics.UI.GLUtil as GLU
 
 import Prelude hiding ((.), id)
 import Control.Lens (over, both)
@@ -9,18 +12,22 @@ import Graphics
 import Control.Monad as M (forM_, when, void)
 import Data.VectorSpace
 import Control.Wire
-import qualified Graphics.UI.SDL as SDL
-import qualified Graphics.UI.SDL.Image as SDLI
+import qualified Codec.Image.PNG as PNG
+import Data.Array.Storable (withStorableArray)
 
-import FSB.Renderer
-
-data SDLRenderer = SDLRenderer {
-                    _screen :: SDL.Surface,
-                    _sheep :: SDL.Surface
+data GLRenderer = GLRenderer {
+                    _sheep :: GL.TextureObject
                   }
 
+loadUnsafe :: FilePath -> IO GL.TextureObject
+loadUnsafe imagePath = do
+    Right img <- PNG.loadPNGFile imagePath
+    let imgArr = imageData img
+    let (w,h) = PNG.dimensions img
+    withStorableArray $ \ptr -> GLU.loadTexture (GLU.texInfo w h GLU.TexRGBA ptr) ptr
+
 initRenderer = do
-    r <- SDLRenderer <$> (SDL.setVideoMode C.width C.height 32 [SDL.SWSurface]) <*> SDLI.load "sheep.png"
+    r <- GLRenderer <$> loadUnsafe "sheep.png"
     return $ Renderer (drawGame r)
 
 cloudRects w d  = [

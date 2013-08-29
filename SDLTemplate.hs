@@ -2,7 +2,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
-{-# LANGUAGE ImplicitParams #-}
 module SDLTemplate where
 
 import FSB.Renderer.SDL (initRenderer)
@@ -55,26 +54,6 @@ fractionToNight hour = abs (hour - 12) / 12
 
 skyColor dt = C.dayColor + (C.nightColor - C.dayColor) ^* fractionToNight dt
 
-data Cloud = Cloud (ObjectState (Double, Double)) Int
-
-cloudGen =  proc wat -> do
-  y <- noiseRM -< (500 :: Double, 600 :: Double)
-  w <- noiseRM -< (30 :: Int, 85 :: Int)
-  returnA -< Cloud (ObjectState (y, 0 - fromIntegral w) (5,0)) w
-
-cloudWire (Cloud state width) = fmap (\s -> Cloud s width) $ object_ (const id) state
-
-cloudMaker = clouds . event (periodically 5 . cloudGen)
-
--- TODO: this should use mkGen to create clouds
-cloudSystem = proc xxx -> do
-  xs <- cloudMaker -< xxx
-  moved <- ?a -< xs
-  returnA -< moved
-
-clouds :: Wire e m (Maybe a) [a]
-clouds = accum (\v c -> maybe v (:v) c) []
-
 timeCycle = fmap ((`mod'` 24) . (+17)) (timeFrom 0)
 
 starsW :: (Monoid e, Monad m, MonadRandom m) => (Int, Int) -> Wire e m a [(Int, Int)]
@@ -91,9 +70,10 @@ world = World (BLRect 0 10 (realToFrac C.width) (realToFrac $ C.height - 10)) [
                                                  ]
 
 sdlThrustControl = keysDownW >>> (arr (applyControls player1) &&& arr (applyControls player2))
+  where applyControls f = mapMaybe f . Set.toList
 
 shipSim thrustController = GameState <$> (thrustController >>> runShips (C.shipW, C.shipH) world)
-skySim = Sky <$> (timeCycle >>^ skyColor) <*> starsW (C.width, C.height)
+skySim = Sky <$> (timeCycle >>^ skyColor) <*> starsW (C.width, C.height) <*> pure [Cloud 100 20 (10, 500)]
 
 data Loop = TapToStart
           | Play
@@ -124,8 +104,6 @@ main = SDL.withInit [SDL.InitEverything] $ do
         play renderer s' w'
       Just _ -> return $ ShowVictory `uncurry` state
 
-applyControls f = mapMaybe f . Set.toList
-
 runShips shipSize world = proc (controls1, controls2) -> do
   ship1 <- shipWire shipSize world (100, 200) -< controls1 
   ship2 <- shipWire shipSize world (300, 200) -< controls2
@@ -140,7 +118,7 @@ ship1Wins ship1 ship2 = let collisionVector = normalized $ _shipPosition ship1 -
 shipWire shipSize world initPos = proc (controls) -> do
   let thrust = acceleration controls
   let boost = ThrustBoost `elem` controls
-  s <- spaceShipObject shipSize initPos -< (Accelerate (thrust * if boost then 2.5 else 1.0), world)
+  s <- spaceShipObject shipSize initPos -< (Accelerate ((thrust * (if boost then 2.5 else 1.0)) + gravity B), world)
   returnA -< (Ship s thrust boost)
 
 objectDiffForControls controls g = let thrust = acceleration controls
