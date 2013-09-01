@@ -140,7 +140,7 @@ ship1Wins ship1 ship2 = let collisionVector = normalized $ _shipPosition ship1 -
 shipWire shipSize world initPos = proc (controls) -> do
   let thrust = acceleration controls
   let boost = ThrustBoost `elem` controls
-  s <- spaceShipObject shipSize initPos -< (Accelerate (thrust * if boost then 2.5 else 1.0), world)
+  s <- spaceShipObject shipSize initPos -< (Accelerate ((thrust * if boost then 2.5 else 1.0) + gravity B), world)
   returnA -< (Ship s thrust boost)
 
 objectDiffForControls controls g = let thrust = acceleration controls
