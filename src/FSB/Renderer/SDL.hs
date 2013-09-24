@@ -21,7 +21,7 @@ data SDLRenderer = SDLRenderer {
                   }
 
 initRenderer = do
-    r <- SDLRenderer <$> (SDL.setVideoMode C.width C.height 32 [SDL.Fullscreen, SDL.SWSurface]) <*> SDLI.load "sheep1.png" <*> SDLI.load "sheep2.png"
+    r <- SDLRenderer <$> (SDL.setVideoMode C.width C.height 32 [SDL.SWSurface]) <*> SDLI.load "sheep1.png" <*> SDLI.load "sheep2.png"
     return $ Renderer (drawGame r)
 
 cloudRects w d  = [
