@@ -6,7 +6,6 @@
 module SDLTemplate where
 
 import FSB.Renderer.SDL (initRenderer)
-import Data.Maybe (mapMaybe)
 import Data.Fixed
 import qualified Config as C
 import Graphics
@@ -18,35 +17,10 @@ import Data.Foldable (asum, mapM_, foldMap, elem)
 import Debug.Trace (trace)
 import Prelude hiding ((.), id, mapM_, elem)
 import Control.Wire hiding (empty)
-import qualified Data.Set as Set (insert, toList, delete)
-import Data.Set (Set)
 import FSB.Types
 import Graphics.UI.SDL as SDL
 import FSB.Renderer
-
-player1 :: Controls SDL.SDLKey
-player1 v = case v of
-              SDL.SDLK_a -> Just ThrustLeft
-              SDL.SDLK_d -> Just ThrustRight
-              SDL.SDLK_s -> Just ThrustDown
-              SDL.SDLK_w -> Just ThrustUp
-              SDL.SDLK_LSHIFT -> Just ThrustBoost
-              _ -> Nothing
-    
-player2 :: Controls SDL.SDLKey
-player2 v = case v of
-              SDL.SDLK_LEFT -> Just ThrustLeft
-              SDL.SDLK_RIGHT -> Just ThrustRight
-              SDL.SDLK_DOWN -> Just ThrustDown
-              SDL.SDLK_UP -> Just ThrustUp
-              SDL.SDLK_RSHIFT -> Just ThrustBoost
-              _ -> Nothing
-
-gravityMagnitude = 240
-gravity L = (-1, 0) ^* gravityMagnitude
-gravity R = (1, 0) ^* gravityMagnitude
-gravity T = (0, 1) ^* gravityMagnitude
-gravity B = (0, -1) ^* gravityMagnitude
+import FSB.Controls
 
 -- init: 0 12 24
 --  -12: -12 0 12
@@ -55,27 +29,7 @@ fractionToNight hour = abs (hour - 12) / 12
 
 skyColor dt = C.dayColor + (C.nightColor - C.dayColor) ^* fractionToNight dt
 
-data Cloud = Cloud (ObjectState (Double, Double)) Int
-
-cloudGen =  proc wat -> do
-  y <- noiseRM -< (500 :: Double, 600 :: Double)
-  w <- noiseRM -< (30 :: Int, 85 :: Int)
-  returnA -< Cloud (ObjectState (y, 0 - fromIntegral w) (5,0)) w
-
-cloudWire (Cloud state width) = fmap (\s -> Cloud s width) $ object_ (const id) state
-
-cloudMaker = clouds . event (periodically 5 . cloudGen)
-
--- TODO: this should use mkGen to create clouds
-cloudSystem = proc xxx -> do
-  xs <- cloudMaker -< xxx
-  moved <- ?a -< xs
-  returnA -< moved
-
-clouds :: Wire e m (Maybe a) [a]
-clouds = accum (\v c -> maybe v (:v) c) []
-
-timeCycle = fmap ((`mod'` 24) . (+17)) (timeFrom 0)
+timeCycle = (`mod'` 24) <$> timeFrom 17
 
 starsW :: (Monoid e, Monad m, MonadRandom m) => (Int, Int) -> Wire e m a [(Int, Int)]
 starsW skySize = timeCycle >>> (id &&& randomPositions skySize) >>> accum changeStars mempty
@@ -84,13 +38,11 @@ starsW skySize = timeCycle >>> (id &&& randomPositions skySize) >>> accum change
                                                 | otherwise = []
 
 randomPositions :: MonadRandom m => (Int, Int) -> Wire e m a (Int, Int)
-randomPositions (w,h) = (,) <$> (pure (0,w) >>> noiseRM) <*> (pure (0,h) >>> noiseRM)
+randomPositions (w,h) = liftA2 (,) (pure (0,w) >>> noiseRM) (pure (0,h) >>> noiseRM)
 
 world = World (BLRect 0 10 (realToFrac C.width) (realToFrac $ C.height - 10)) [
                                                    Thing (BLRect 190 0 30 350) C.goldenRod
                                                  ]
-
-sdlThrustControl = keysDownW >>> (arr (applyControls player1) &&& arr (applyControls player2))
 
 shipSim thrustController = GameState <$> (thrustController >>> runShips (C.shipW, C.shipH) world)
 skySim = Sky <$> (timeCycle >>^ skyColor) <*> starsW (C.width, C.height)
@@ -99,6 +51,10 @@ data Loop = TapToStart
           | Play
           | ShowVictory GameState Sky
 
+instrument wire = mkGen $ \t a -> do
+                    r <- stepWire wire t a
+                    return r
+                    
 main :: IO ()
 main = SDL.withInit [SDL.InitEverything] $ do
   renderer <- initRenderer
@@ -124,7 +80,6 @@ main = SDL.withInit [SDL.InitEverything] $ do
         play renderer s' w'
       Just _ -> return $ ShowVictory `uncurry` state
 
-applyControls f = mapMaybe f . Set.toList
 
 runShips shipSize world = proc (controls1, controls2) -> do
   ship1 <- shipWire shipSize world (100, 200) -< controls1 
@@ -142,6 +97,11 @@ shipWire shipSize world initPos = proc (controls) -> do
   let boost = ThrustBoost `elem` controls
   s <- spaceShipObject shipSize initPos -< (Accelerate ((thrust * if boost then 2.5 else 1.0) + gravity B), world)
   returnA -< (Ship s thrust boost)
+
+gravity L = (-1, 0) ^* C.gravityMagnitude
+gravity R = (1, 0) ^* C.gravityMagnitude
+gravity T = (0, 1) ^* C.gravityMagnitude
+gravity B = (0, -1) ^* C.gravityMagnitude
 
 objectDiffForControls controls g = let thrust = acceleration controls
                                        boost = ThrustBoost `elem` controls
@@ -167,20 +127,6 @@ spaceShipObject size initialPosition = object_ postUpdate (ObjectState initialPo
                                                    T -> (vx, -(abs vy))
                                                    B -> (vx, abs vy)) collision
 
-keysDownW = mkStateM mempty $ \_ (_, keys) -> do
-  newKeys <- parseEvents keys
-  return (Right newKeys, newKeys)
-
-parseEvents :: Set SDL.SDLKey -> IO (Set SDL.SDLKey)
-parseEvents keysDown = do
-  ev <- SDL.pollEvent
-  case ev of
-    SDL.NoEvent -> return keysDown
-    SDL.KeyDown k | SDL.symKey k == SDL.SDLK_q && elem SDL.KeyModLeftMeta (SDL.symModifiers k) -> error "Done"
-    SDL.KeyDown k -> parseEvents (Set.insert (SDL.symKey k) keysDown)
-    SDL.KeyUp k -> parseEvents (Set.delete (SDL.symKey k) keysDown)
-    SDL.Quit -> error "Done"
-    _ -> parseEvents keysDown
 
 -- TODO
 -- Good collision detection using a priority queue

@@ -2,6 +2,10 @@ module Config where
 
 import FSB.Types
 
+
+gravityMagnitude = 240 :: Double
+
+-- UI
 nightColor, dayColor, groundColor :: T3 Double
 nightColor = black
 dayColor = niceSky'
@@ -24,3 +28,4 @@ yellow = (0, 255, 255)
 niceSky = (224, 236, 239)
 niceSky' = (128, 192, 219)
 badAss = (187, 215, 82)
+

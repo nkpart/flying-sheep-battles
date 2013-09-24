@@ -16,11 +16,12 @@ import FSB.Renderer
 
 data SDLRenderer = SDLRenderer {
                     _screen :: SDL.Surface,
-                    _sheep :: SDL.Surface
+                    _sheep1 :: SDL.Surface,
+                    _sheep2 :: SDL.Surface
                   }
 
 initRenderer = do
-    r <- SDLRenderer <$> (SDL.setVideoMode C.width C.height 32 [SDL.SWSurface]) <*> SDLI.load "sheep.png"
+    r <- SDLRenderer <$> (SDL.setVideoMode C.width C.height 32 [SDL.Fullscreen, SDL.SWSurface]) <*> SDLI.load "sheep1.png" <*> SDLI.load "sheep2.png"
     return $ Renderer (drawGame r)
 
 cloudRects w d  = [
@@ -57,10 +58,11 @@ drawShip screen image ship isDead = do
 
 drawGame renderer world (GameState (ship1, ship2, victory)) sky = do
   let screen = _screen renderer
-  let image = _sheep renderer
+  let image1 =_sheep1 renderer
+  let image2 = _sheep2 renderer
   drawWorld renderer world sky
-  drawShip screen image ship1 $ maybe False not victory
-  drawShip screen image ship2 $ maybe False id  victory
+  drawShip screen image1 ship1 $ maybe False not victory
+  drawShip screen image2 ship2 $ maybe False id  victory
   SDL.flip screen
 
 thrusters (sizeX', sizeY') (tx, ty) boosted = map snd . filter fst $ [

@@ -18,7 +18,7 @@ Executable sdltemplate
   Other-modules:     DynPaths_SDLTemplate
   Main-is:           MainWrapper.hs
   C-Sources:         mainc.c
-  Ghc-options:       -no-hs-main
+  Ghc-options:       -no-hs-main -W
   hs-source-dirs:    src
   Build-depends:     base
                    , SDL >= 0.6.5
