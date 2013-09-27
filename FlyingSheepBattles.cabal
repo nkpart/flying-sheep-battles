@@ -1,4 +1,4 @@
-Name:                SDLTemplate
+Name:                FlyingSheepBattles
 Version:             1.0
 Category:            Game
 Build-type:          Custom
@@ -6,7 +6,7 @@ Extra-source-files:
   mainc.c
   MainWrapper_stub.h
   MainWrapper.hs
-  SDLTemplate.hs
+  FlyingSheepBattles.hs
 Cabal-version:       >=1.2
 Data-files:  *.png
 
@@ -14,8 +14,7 @@ Flag bundleall
   Description: Bundle all resources into the .app (OSX only)
   Default:     True
 
-Executable sdltemplate
-  Other-modules:     DynPaths_SDLTemplate
+Executable flyingsheepbattles
   Main-is:           MainWrapper.hs
   C-Sources:         mainc.c
   Ghc-options:       -no-hs-main -W

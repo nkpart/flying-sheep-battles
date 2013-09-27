@@ -3,7 +3,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE ImplicitParams #-}
-module SDLTemplate where
+module FlyingSheepBattles where
 
 import FSB.Renderer.SDL (initRenderer)
 import Data.Fixed
