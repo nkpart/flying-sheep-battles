@@ -34,7 +34,7 @@ drawWorld renderer world (Sky sky stars) = do
   let screen = _screen renderer
   let draw = paintRect screen C.height
   paintScreen screen sky
-  forM_ stars $ \(x,y) -> draw (lerp sky (255,255,255) ((fromIntegral y / fromIntegral C.height) ^ 2)) $ BLRect x y 2 2
+  forM_ stars $ \(x,y) -> draw (lerp sky (255,255,255) ((fromIntegral y / fromIntegral C.height) ^ 2)) (BLRect x y 2 2)
   forM_ (map (moveRelativeTo (10, 500)) $ cloudRects 100 20) $ draw (255, 255, 255)
   forM_ (_worldScenery world) $ \(Thing r c) -> draw c $ fmap round r
   -- ground

@@ -11,11 +11,11 @@ data Cloud = Cloud (ObjectState (Double, Double)) Int
 cloudGen =  proc wat -> do
   y <- noiseRM -< (500 :: Double, 600 :: Double)
   w <- noiseRM -< (30 :: Int, 85 :: Int)
-  returnA -< Cloud (ObjectState (y, 0 - fromIntegral w) (5,0)) w
+  returnA -< Cloud (ObjectState (y, negate $ fromIntegral w) (5,0)) w
 
 cloudWire (Cloud state width) = fmap (\s -> Cloud s width) $ object_ (const id) state
 
-cloudMaker = clouds . event (periodically 5 . cloudGen)
+cloudMaker = clouds . event (periodically 5 >>> cloudGen)
 
 -- TODO: this should use mkGen to create clouds
 cloudSystem = proc xxx -> do

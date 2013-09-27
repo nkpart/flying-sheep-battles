@@ -1,8 +1,6 @@
 {-# LANGUAGE Arrows #-}
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
-{-# LANGUAGE ImplicitParams #-}
 module FlyingSheepBattles where
 
 import FSB.Renderer.SDL (initRenderer)
@@ -51,17 +49,13 @@ data Loop = TapToStart
           | Play
           | ShowVictory GameState Sky
 
-instrument wire = mkGen $ \t a -> do
-                    r <- stepWire wire t a
-                    return r
-                    
 main :: IO ()
 main = SDL.withInit [SDL.InitEverything] $ do
   renderer <- initRenderer
   let thrustController = sdlThrustControl
-  let loop Play = loop =<< (play renderer clockSession $ shipSim thrustController &&& skySim
+  let loop Play = loop =<< play renderer clockSession (shipSim thrustController &&& skySim
                                                                <* ((sampleFPS 1.0 >>^ mapM_ print) >>> perform))
-      loop (ShowVictory gameState sky) = loop =<< (victory renderer gameState sky clockSession $ fmap (> 3) $ timeFrom 0)
+      loop (ShowVictory gameState sky) = loop =<< victory renderer gameState sky clockSession (fmap (> 3) time)
   loop Play
   return ()
  where
@@ -126,8 +120,3 @@ spaceShipObject size initialPosition = object_ postUpdate (ObjectState initialPo
                                                    R -> (-(abs vx), vy)
                                                    T -> (vx, -(abs vy))
                                                    B -> (vx, abs vy)) collision
-
-
--- TODO
--- Good collision detection using a priority queue
--- vector based collisions instead of the weird overlapping edges thing?
