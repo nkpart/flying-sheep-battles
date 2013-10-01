@@ -3,7 +3,8 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 module FlyingSheepBattles where
 
-import FSB.Renderer.SDL (initRenderer)
+-- import FSB.Renderer.SDL (initRenderer)
+import FSB.Renderer.OpenGL (initRenderer)
 import Data.Fixed
 import qualified Config as C
 import Graphics

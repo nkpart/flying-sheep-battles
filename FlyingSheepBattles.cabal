@@ -31,4 +31,6 @@ Executable flyingsheepbattles
                    , newtype >= 0.2
                    , vector-space >= 0.8.6
                    , transformers >= 0.3.0.0
-
+                   , OpenGL
+                   , JuicyPixels
+                   , vector
