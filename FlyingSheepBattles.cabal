@@ -17,7 +17,7 @@ Flag bundleall
 Executable flyingsheepbattles
   Main-is:           MainWrapper.hs
   C-Sources:         mainc.c
-  Ghc-options:       -no-hs-main -W
+  Ghc-options:       -no-hs-main -W -fno-warn-missing-signatures
   hs-source-dirs:    src
   Build-depends:     base
                    , SDL >= 0.6.5

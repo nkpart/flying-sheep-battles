@@ -47,3 +47,14 @@ boundsCheck (BLRect ix' iy iw ih) (BLRect ox oy ow oh) | ix' < ox = Just L
                                                      | otherwise = Nothing
 
 rectForCenter (x,y) (sizeX', sizeY') = BLRect (round x - sizeX' `div` 2) (round y - sizeY' `div` 2) sizeX' sizeY'
+
+data Graphics m a = Graphics {
+  initializer :: m (),
+  drawFrame :: m () -> m (),
+  openImage :: FilePath -> m a,
+  paintScreen' :: T3 Double -> m (),
+  paintRect' :: Int -> T3 Double -> BLRect Int -> m (),
+  paintRectTex' :: Int -> a -> BLRect Int -> m ()
+}
+
+type T3 a = (a,a,a)

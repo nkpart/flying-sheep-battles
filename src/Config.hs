@@ -6,7 +6,7 @@ import FSB.Types
 gravityMagnitude = 240 :: Double
 
 -- UI
-nightColor, dayColor, groundColor :: T3 Double
+nightColor, dayColor, groundColor :: (Double, Double, Double)
 nightColor = black
 dayColor = niceSky'
 groundColor = badAss
@@ -20,7 +20,7 @@ shipH = 32
 
 black = (0,0,0)
 
-goldenRod, papayaWhip, yellow, niceSky', badAss :: Num a => T3 a
+goldenRod, papayaWhip, yellow, niceSky', badAss :: Num a => (a,a,a)
 goldenRod = (238, 232, 170)
 papayaWhip = (255, 239, 213)
 yellow = (0, 255, 255)
