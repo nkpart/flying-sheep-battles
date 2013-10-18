@@ -20,9 +20,10 @@ data SDLRenderer = SDLRenderer {
                     _sheep2 :: SDL.Surface
                   }
 
-initRenderer = do
-    r <- SDLRenderer <$> (SDL.setVideoMode C.width C.height 32 [SDL.SWSurface]) <*> SDLI.load "sheep1.png" <*> SDLI.load "sheep2.png"
-    return $ Renderer (drawGame r)
+sdlGraphics :: IO (Graphics IO SDL.Surface)
+sdlGraphics = do
+    s <- SDL.setVideoMode C.width C.height 32 [SDL.SWSurface]
+    return $ Graphics (return ()) drawFrame SDLI.load (paintScreen s) undefined undefined
 
 cloudRects w d  = [
                  BLRect d 0 (w - 2 * d) (d `div` 2),
@@ -30,40 +31,6 @@ cloudRects w d  = [
                  BLRect d (d + d `div` 2) (w - 2 * d) (d `div` 2)
                  ]
 
-drawWorld renderer world (Sky sky stars) = do
-  let screen = _screen renderer
-  let draw = paintRect screen C.height
-  paintScreen screen sky
-  forM_ stars $ \(x,y) -> draw (lerp sky (255,255,255) ((fromIntegral y / fromIntegral C.height) ^ 2)) (BLRect x y 2 2)
-  forM_ (map (moveRelativeTo (10, 500)) $ cloudRects 100 20) $ draw (255, 255, 255)
-  forM_ (_worldScenery world) $ \(Thing r c) -> draw c $ fmap round r
-  -- ground
-  draw C.groundColor $ BLRect 0 0 C.width 10
-
-drawShip screen image ship isDead = do
-  let draw = paintRect screen C.height
-  wiggle <- if _shipThrust ship /= (0,0)
-              then randomRIO (-2, 2)
-              else return 0
-  let wiggledSize = over both (+ wiggle * 2) (C.shipW, C.shipH)
-
-  let (Ship {..}) = ship
-  let rect@(BLRect leftEdge bottomEdge _ _)  = rectForCenter (_shipPosition ship) wiggledSize
-  SDL.blitSurface image Nothing screen $ Just $ toSDLRect C.height rect
-  M.when isDead $ draw (255, 0, 0) $ BLRect leftEdge bottomEdge C.shipW 10
-
-  -- Draw Thrusters
-  let thrustColor = if not _shipBoosting then (200,50,0) else (255, 100, 0)
-  forM_ (thrusters wiggledSize _shipThrust _shipBoosting) (draw thrustColor . moveRelativeTo (leftEdge, bottomEdge))
-
-drawGame renderer world (GameState (ship1, ship2, victory)) sky = do
-  let screen = _screen renderer
-  let image1 =_sheep1 renderer
-  let image2 = _sheep2 renderer
-  drawWorld renderer world sky
-  drawShip screen image1 ship1 $ maybe False not victory
-  drawShip screen image2 ship2 $ maybe False id  victory
-  SDL.flip screen
 
 thrusters (sizeX', sizeY') (tx, ty) boosted = map snd . filter fst $ [
          (tx > 0 , BLRect (-sizeO) ((sizeY' `div` 2) - (size `div` 2)) sizeO size)

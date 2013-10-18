@@ -4,7 +4,7 @@
 module FlyingSheepBattles where
 
 -- import FSB.Renderer.SDL (initRenderer)
-import FSB.Renderer.OpenGL (initRenderer)
+import FSB.Renderer.OpenGL (openglGraphics)
 import Data.Fixed
 import qualified Config as C
 import Graphics
@@ -18,6 +18,7 @@ import Prelude hiding ((.), id, mapM_, elem)
 import Control.Wire hiding (empty)
 import FSB.Types
 import Graphics.UI.SDL as SDL
+import FSB.Renderer.Drawer (initR)
 import FSB.Renderer
 import FSB.Controls
 
@@ -52,7 +53,7 @@ data Loop = TapToStart
 
 main :: IO ()
 main = SDL.withInit [SDL.InitEverything] $ do
-  renderer <- initRenderer
+  renderer <- initR openglGraphics
   let thrustController = sdlThrustControl
   let loop Play = loop =<< play renderer clockSession (shipSim thrustController &&& skySim
                                                                <* ((sampleFPS 1.0 >>^ mapM_ print) >>> perform))

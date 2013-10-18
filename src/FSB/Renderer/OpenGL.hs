@@ -14,9 +14,13 @@ import Graphics.Rendering.OpenGL.GL (($=))
 
 import FSB.Renderer.Drawer
 
-initRenderer = initR wat
-  where wat = Graphics init' drawFram' imageToTex paintScreen  paintRect paintRectTex
-        init' = do
+xxx = let x = 3
+          y = 2
+          z = 1
+       in y + z
+
+openglGraphics = Graphics init' drawFrame imageToTex paintScreen  paintRect paintRectTex
+  where init' = do
           SDL.glSetAttribute SDL.glDoubleBuffer 1
           _ <- SDL.setVideoMode C.width C.height 32 [SDL.OpenGL]
           GL.clearColor $= GL.Color4 0 0 0 0
@@ -25,11 +29,10 @@ initRenderer = initR wat
           GL.loadIdentity
           GL.ortho 0 (fromIntegral C.width) (fromIntegral C.height) 0 (-1) 1
           GL.matrixMode $= GL.Modelview 0
-
-drawFram' f = do
-   GL.clear [GL.ColorBuffer]
-   f
-   SDL.glSwapBuffers
+        drawFrame f = do
+          GL.clear [GL.ColorBuffer]
+          f
+          SDL.glSwapBuffers
 
 paintScreen :: (Double, Double, Double) -> IO ()
 paintScreen (r, g, b) = do
